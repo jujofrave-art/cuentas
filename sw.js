@@ -1,9 +1,12 @@
 /**
- * Cuentas de papá — hace que la app abra sin internet.
- * Guarda una copia de la app en el teléfono la primera vez que se abre.
+ * Cuentas claras — hace que la app abra sin internet.
+ *
+ * La regla es: con señal, siempre la versión más nueva; sin señal, la copia
+ * guardada. Antes era al revés y por eso las actualizaciones tardaban días
+ * en aparecer.
  */
 
-var CACHE = 'cuentas-familia-v3';
+var CACHE = 'cuentas-2026-08-13-c';
 var BASE = new URL('./', self.location).pathname;
 
 var ARCHIVOS = [
@@ -35,6 +38,15 @@ self.addEventListener('activate', function (e) {
   );
 });
 
+/** Guarda una copia de la respuesta para cuando no haya señal. */
+function guardar(req, resp) {
+  if (resp && (resp.ok || resp.type === 'opaque')) {
+    var copia = resp.clone();
+    caches.open(CACHE).then(function (c) { c.put(req, copia); });
+  }
+  return resp;
+}
+
 self.addEventListener('fetch', function (e) {
   var req = e.request;
 
@@ -46,18 +58,36 @@ self.addEventListener('fetch', function (e) {
   var mismoOrigen = new URL(req.url).origin === self.location.origin;
   if (!mismoOrigen && !esTipografia) return;
 
-  // Primero la copia guardada; en segundo plano se busca una versión nueva.
+  var esLaApp = req.mode === 'navigate' ||
+                req.url.indexOf('index.html') > -1 ||
+                req.url.replace(/[?#].*$/, '').endsWith(BASE);
+
+  // La app misma: primero la red, para que una versión nueva se vea de una.
+  // Si la red falla o tarda más de 4 segundos, entra la copia guardada.
+  if (esLaApp) {
+    e.respondWith(
+      Promise.race([
+        fetch(req).then(function (resp) { return guardar(req, resp); }),
+        new Promise(function (resolver) {
+          setTimeout(function () {
+            caches.match(req).then(function (g) { if (g) resolver(g); });
+          }, 4000);
+        })
+      ]).catch(function () {
+        return caches.match(req).then(function (g) {
+          return g || caches.match(BASE + 'index.html');
+        });
+      })
+    );
+    return;
+  }
+
+  // Lo demás (iconos, tipografías) casi nunca cambia: primero lo guardado.
   e.respondWith(
     caches.match(req).then(function (guardada) {
-      var red = fetch(req).then(function (resp) {
-        if (resp && (resp.ok || resp.type === 'opaque')) {
-          var copia = resp.clone();
-          caches.open(CACHE).then(function (c) { c.put(req, copia); });
-        }
-        return resp;
-      }).catch(function () {
-        return guardada || (req.mode === 'navigate' ? caches.match(BASE + 'index.html') : Response.error());
-      });
+      var red = fetch(req)
+        .then(function (resp) { return guardar(req, resp); })
+        .catch(function () { return guardada || Response.error(); });
       return guardada || red;
     })
   );
