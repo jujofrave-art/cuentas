@@ -1174,6 +1174,7 @@ mark{background:#F4E7A8;color:inherit;padding:0 1px}
           return;
         }
         fusionar(resp);
+        imponerPermisoDeLaHoja(resp, correo);
 
         // Segunda comprobación contra lo ya mezclado, por si este dispositivo
         // traía una contraseña recién puesta que la hoja aún no conoce.
@@ -1203,6 +1204,23 @@ mark{background:#F4E7A8;color:inherit;padding:0 1px}
         $('pu-entrar').textContent = 'Entrar';
         pintarPuerta(mensajeError(err));
       });
+  }
+
+  /**
+   * Al iniciar sesión, la hoja es la verdad sobre mi propio permiso: su versión
+   * pisa la copia local aunque sea más vieja. Se respeta lo local solo si hay
+   * un cambio mío todavía sin subir, para no perder una contraseña puesta sin señal.
+   */
+  function imponerPermisoDeLaHoja(remoto, correo) {
+    var c = normCorreo(correo);
+    var suyo = (remoto.permisos || []).filter(function (p) { return normCorreo(p.correo) === c; })[0];
+    if (!suyo) return;
+
+    var local = datos.permisos.filter(function (p) { return normCorreo(p.correo) === c; })[0];
+    if (local && local.actualizado > datos.ultimoSync) return;   // cambio mío pendiente de subir
+
+    datos.permisos = datos.permisos.filter(function (p) { return normCorreo(p.correo) !== c; });
+    datos.permisos.push(suyo);
   }
 
   function cerrarSesion() {
@@ -1297,6 +1315,18 @@ mark{background:#F4E7A8;color:inherit;padding:0 1px}
       .then(function () { sincronizando = false; pintar(); })
       .catch(function (err) {
         sincronizando = false;
+        var m = String(err && err.message || err);
+        if (m.indexOf('sesión venció') > -1) {
+          ultimoError = '';
+          datos.sesion = '';
+          datos.ficha = '';
+          puertaModo = 'entrar';
+          guardar().then(function () {
+            pintar();
+            pintarPuerta('Tu sesión venció. Entra otra vez con tu contraseña.', 'aviso');
+          });
+          return;
+        }
         ultimoError = mensajeError(err);
         pintarEstado();
       });
