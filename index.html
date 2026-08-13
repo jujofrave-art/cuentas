@@ -1,0 +1,2515 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Cuentas claras</title>
+<meta name="author" content="Juan José Franco Velásquez">
+<!-- Cuentas claras · Hecho por Juan José Franco Velásquez -->
+<link rel="manifest" href="manifest.webmanifest">
+<meta name="theme-color" content="#E7EDE3">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Cuentas">
+<link rel="apple-touch-icon" href="icono-180.png">
+<link rel="icon" href="icono-192.png">
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Bodoni+Moda:opsz,wght@6..96,500;6..96,700&family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600&display=swap');
+
+:root{
+  --paper:#E7EDE3;
+  --card:#FBFCFA;
+  --rule:#BFD2B8;
+  --rule-soft:#D8E4D2;
+  --ink:#16201A;
+  --ink-soft:#5B6B5E;
+  --debe:#A32E2E;
+  --haber:#1D4E6B;
+  --mono:"IBM Plex Mono",ui-monospace,SFMono-Regular,Menlo,monospace;
+  --sans:"IBM Plex Sans",system-ui,-apple-system,"Segoe UI",sans-serif;
+  --display:"Bodoni Moda",Didot,Georgia,serif;
+}
+
+*{box-sizing:border-box}
+html,body{margin:0;background:var(--paper)}
+
+#app{
+  font-family:var(--sans);color:var(--ink);max-width:720px;margin:0 auto;
+  padding:0 0 72px;line-height:1.45;-webkit-text-size-adjust:100%;
+}
+#app button{font-family:inherit;cursor:pointer}
+#app :focus-visible{outline:2px solid var(--haber);outline-offset:2px}
+
+/* ---------- encabezado ---------- */
+.ledger-head{padding:28px 20px 18px;border-bottom:1.5px solid var(--ink)}
+.ledger-head h1{font-family:var(--display);font-weight:700;font-size:30px;letter-spacing:-.01em;margin:0}
+.ledger-head .sub{font-family:var(--mono);font-size:10.5px;letter-spacing:.16em;text-transform:uppercase;color:var(--ink-soft);margin-top:6px}
+.neto{margin-top:22px;display:flex;align-items:baseline;justify-content:space-between;gap:12px;flex-wrap:wrap}
+.neto .etiqueta{font-size:13px;color:var(--ink-soft);max-width:48%}
+.neto .cifra{font-family:var(--mono);font-weight:600;font-size:34px;letter-spacing:-.02em;font-variant-numeric:tabular-nums}
+
+/* ---------- barra de sincronización ---------- */
+.estado{
+  display:flex;align-items:center;justify-content:space-between;gap:10px;
+  padding:9px 20px;border-bottom:1px solid var(--rule);background:#DFE9DA;
+  font-size:12.5px;color:var(--ink-soft);
+}
+.estado .texto{display:flex;align-items:center;gap:7px;min-width:0}
+.estado .punto{width:7px;height:7px;border-radius:50%;background:var(--ink-soft);flex:none}
+.estado[data-tono="ok"] .punto{background:#3C7D4A}
+.estado[data-tono="espera"] .punto{background:#C08A2E}
+.estado[data-tono="error"] .punto{background:var(--debe)}
+.estado[data-tono="error"] .texto{color:var(--debe)}
+.estado .texto span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+
+/* ---------- bloques ---------- */
+.bloque{padding:22px 20px 0}
+.bloque > h2{
+  font-family:var(--mono);font-size:10.5px;font-weight:500;letter-spacing:.16em;
+  text-transform:uppercase;color:var(--ink-soft);margin:0 0 10px;
+  display:flex;justify-content:space-between;align-items:center;gap:10px;
+}
+
+/* ---------- deudas abiertas ---------- */
+.deudas{display:grid;gap:7px}
+.deuda{
+  background:var(--card);border:1px solid var(--rule-soft);border-left:3px solid var(--debe);
+  padding:11px 14px;display:flex;align-items:center;justify-content:space-between;gap:12px;
+  width:100%;text-align:left;color:inherit;font-size:14.5px;
+}
+.deuda .quienes{min-width:0}
+.deuda .deudor{font-weight:600}
+.deuda .rel{color:var(--ink-soft);font-size:12px;display:block;margin-top:1px}
+.deuda .cuanto{font-family:var(--mono);font-variant-numeric:tabular-nums;font-weight:500;color:var(--debe);white-space:nowrap}
+
+/* ---------- personas ---------- */
+.personas{display:grid;gap:7px}
+.persona{
+  background:var(--card);border:1px solid var(--rule-soft);border-left:3px solid var(--rule);
+  padding:10px 14px;display:flex;align-items:center;justify-content:space-between;gap:12px;
+  width:100%;text-align:left;color:inherit;font-size:14.5px;
+}
+.persona[data-lado="favor"]{border-left-color:var(--haber)}
+.persona[data-lado="debe"]{border-left-color:var(--debe)}
+.persona[aria-pressed="true"]{background:#F0F5EE;border-color:var(--ink)}
+.persona .nombre{font-weight:600}
+.persona .frase{display:block;font-size:12px;font-weight:400;color:var(--ink-soft);margin-top:1px}
+.persona .cifras{display:grid;gap:2px;justify-items:end}
+.persona .linea-cifra{display:flex;align-items:baseline;gap:7px;white-space:nowrap}
+.persona .et{font-family:var(--mono);font-size:9.5px;letter-spacing:.09em;text-transform:uppercase;color:var(--ink-soft)}
+.persona .saldo{font-family:var(--mono);font-variant-numeric:tabular-nums;font-weight:500;white-space:nowrap}
+
+/* ---------- ficha de la persona ---------- */
+.ficha-fondo{
+  position:fixed;inset:0;background:rgba(22,32,26,.5);z-index:50;
+  display:flex;align-items:flex-end;justify-content:center;
+}
+@media (min-width:600px){.ficha-fondo{align-items:center;padding:24px}}
+.ficha{
+  background:var(--paper);border:1px solid var(--ink);width:100%;max-width:560px;
+  max-height:90vh;overflow:auto;-webkit-overflow-scrolling:touch;
+  font-family:var(--sans);color:var(--ink);line-height:1.45;
+}
+.ficha button{font-family:inherit;cursor:pointer}
+.ficha :focus-visible{outline:2px solid var(--haber);outline-offset:2px}
+.ficha-cab{
+  position:sticky;top:0;z-index:1;background:var(--paper);border-bottom:1.5px solid var(--ink);
+  padding:15px 18px;display:flex;justify-content:space-between;align-items:flex-start;gap:12px;
+}
+.ficha-cab h3{font-family:var(--display);font-size:25px;font-weight:700;margin:0;line-height:1.1}
+.ficha-cab .resu{font-size:12.5px;color:var(--ink-soft);margin-top:3px;display:block}
+.ficha-cab .cerrar{background:none;border:0;font-size:21px;line-height:1;color:var(--ink-soft);padding:2px 6px;flex:none}
+.ficha-cuerpo{padding:16px 18px 24px}
+.ficha h4{font-family:var(--mono);font-size:10px;letter-spacing:.16em;text-transform:uppercase;color:var(--ink-soft);margin:20px 0 8px}
+.ficha h4:first-child{margin-top:0}
+.totales{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.tot{border:1px solid var(--rule);background:var(--card);padding:10px 12px}
+.tot[data-lado="favor"]{border-left:3px solid var(--haber)}
+.tot[data-lado="debe"]{border-left:3px solid var(--debe)}
+.tot .et{display:block;font-family:var(--mono);font-size:9.5px;letter-spacing:.09em;text-transform:uppercase;color:var(--ink-soft)}
+.tot .n{font-family:var(--mono);font-variant-numeric:tabular-nums;font-size:17px;font-weight:600;margin-top:2px;display:block}
+.tot[data-lado="favor"] .n{color:var(--haber)}
+.tot[data-lado="debe"] .n{color:var(--debe)}
+.rel-lista{display:grid;gap:6px}
+.rel{
+  background:var(--card);border:1px solid var(--rule-soft);padding:10px 12px;
+  display:flex;justify-content:space-between;align-items:center;gap:10px;
+  width:100%;text-align:left;font-size:14px;color:inherit;font-family:var(--sans);
+}
+.rel[data-lado="favor"]{border-left:3px solid var(--haber)}
+.rel[data-lado="debe"]{border-left:3px solid var(--debe)}
+.rel .quien2{font-weight:600}
+.rel .rel-txt{display:block;font-size:11.5px;font-weight:400;color:var(--ink-soft);margin-top:1px}
+.rel .cifrita{font-family:var(--mono);font-variant-numeric:tabular-nums;font-weight:500;white-space:nowrap}
+.rel[data-lado="favor"] .cifrita{color:var(--haber)}
+.rel[data-lado="debe"] .cifrita{color:var(--debe)}
+.movs.compacta .mov{grid-template-columns:52px 1fr auto}
+
+/* ---------- préstamos ---------- */
+.prest{background:var(--card);border:1px solid var(--rule-soft);border-left:3px solid var(--haber);padding:11px 13px;font-size:14px}
+.prest[data-estado="saldado"]{border-left-color:var(--rule);opacity:.7}
+.prest .fila1{display:flex;justify-content:space-between;align-items:flex-start;gap:10px}
+.prest .rel-txt{display:block;font-size:11.5px;font-weight:400;color:var(--ink-soft);margin-top:1px}
+.prest .cifrita{font-family:var(--mono);font-variant-numeric:tabular-nums;font-weight:500;white-space:nowrap}
+.prest .barra{height:5px;background:var(--rule-soft);margin-top:9px}
+.prest .barra i{display:block;height:100%;background:var(--haber)}
+.prest[data-estado="saldado"] .barra i{background:var(--ink-soft)}
+.prest .det{font-family:var(--mono);font-size:9.5px;letter-spacing:.09em;color:var(--ink-soft);margin-top:6px}
+.prest details{margin-top:7px;border-top:1px dotted var(--rule-soft);padding-top:5px}
+.prest summary{font-size:12px;color:var(--haber);cursor:pointer;list-style:none}
+.prest summary::-webkit-details-marker{display:none}
+.prest summary::before{content:"▸ "}
+.prest details[open] summary::before{content:"▾ "}
+.prest .abono{display:flex;justify-content:space-between;gap:10px;font-size:12.5px;color:var(--ink-soft);padding:4px 0 0 12px}
+
+/* ---------- ver la contraseña ---------- */
+.con-ojo{position:relative;display:block}
+.con-ojo input{padding-right:46px}
+.ojo{
+  position:absolute;right:1px;top:1px;bottom:1px;width:42px;
+  display:flex;align-items:center;justify-content:center;
+  background:none;border:0;color:var(--ink-soft);padding:0;
+}
+.ojo:hover{color:var(--ink)}
+.ojo svg{width:19px;height:19px;display:block}
+
+/* ---------- marca de agua ---------- */
+.marca-agua{
+  position:fixed;inset:0;pointer-events:none;z-index:0;overflow:hidden;
+  display:flex;align-items:center;justify-content:center;
+}
+.marca-agua span{
+  font-family:var(--display);
+  font-size:clamp(30px,7vw,64px);
+  font-weight:700;
+  letter-spacing:.02em;
+  color:var(--ink);
+  opacity:.045;
+  transform:rotate(-24deg);
+  white-space:nowrap;
+  text-align:center;
+  line-height:1.25;
+}
+#app{position:relative;z-index:1}
+.firma{
+  font-family:var(--mono);
+  font-size:10px;
+  letter-spacing:.14em;
+  text-transform:uppercase;
+  color:var(--ink-soft);
+  opacity:.75;
+  margin-top:6px;
+  display:block;
+}
+@media print{.marca-agua span{opacity:.09}}
+
+/* ---------- puerta de entrada ---------- */
+.puerta{
+  position:fixed;inset:0;background:var(--paper);z-index:80;overflow:auto;
+  display:flex;align-items:center;justify-content:center;padding:24px 20px;
+  font-family:var(--sans);color:var(--ink);line-height:1.45;
+}
+.puerta button{font-family:inherit;cursor:pointer}
+.puerta :focus-visible{outline:2px solid var(--haber);outline-offset:2px}
+.puerta .caja{width:100%;max-width:420px}
+.puerta h2{font-family:var(--display);font-size:31px;font-weight:700;margin:0}
+.puerta .sub{font-family:var(--mono);font-size:10.5px;letter-spacing:.16em;text-transform:uppercase;color:var(--ink-soft);margin:6px 0 22px}
+.puerta .campo input{background:#fff}
+.puerta .aviso{font-size:12px;color:var(--ink-soft);border-top:1px solid var(--rule);margin-top:20px;padding-top:12px}
+
+/* ---------- permisos ---------- */
+.quien-soy{font-size:12px;color:var(--ink-soft);margin:14px 0 0}
+.quien-soy b{color:var(--ink);font-weight:600}
+.perm-lista{border-top:1px solid var(--rule-soft);margin:4px 0 0}
+.perm{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:9px 0;border-bottom:1px solid var(--rule-soft);font-size:13.5px}
+.perm .correo{font-family:var(--mono);font-size:12px;word-break:break-all;min-width:0}
+.perm .llave{font-family:var(--mono);font-size:9px;letter-spacing:.1em;color:var(--ink-soft);display:block;margin-top:2px}
+.perm .acc{display:flex;align-items:center;gap:4px;flex:none}
+.perm .quitar{background:none;border:0;color:var(--ink-soft);font-size:15px;padding:2px 6px;opacity:.6}
+.perm .quitar:hover{opacity:1;color:var(--debe)}
+.perm .fijo{font-family:var(--mono);font-size:9px;letter-spacing:.1em;color:var(--ink-soft);border:1px solid var(--rule);padding:3px 6px}
+.perm-vacio{font-size:12.5px;color:var(--ink-soft);padding:10px 0}
+@media (prefers-reduced-motion:no-preference){
+  .ficha{animation:sube .2s ease-out}
+  @keyframes sube{from{transform:translateY(14px);opacity:0}to{transform:none;opacity:1}}
+}
+.saldo[data-lado="favor"]{color:var(--haber)}
+.saldo[data-lado="debe"]{color:var(--debe)}
+.saldo[data-lado="cero"]{color:var(--ink-soft)}
+
+/* ---------- buscador ---------- */
+.buscador{position:relative;margin-bottom:10px}
+.buscador input{
+  width:100%;font-family:var(--sans);font-size:16px;color:var(--ink);background:#fff;
+  border:1px solid var(--rule);border-radius:0;padding:10px 34px 10px 11px;
+}
+.buscador .limpiar{
+  position:absolute;right:4px;top:50%;transform:translateY(-50%);
+  background:none;border:0;font-size:17px;color:var(--ink-soft);padding:4px 8px;line-height:1;
+}
+.chips{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:10px}
+.chip{
+  display:inline-flex;align-items:center;gap:6px;background:var(--ink);color:var(--paper);
+  border:1px solid var(--ink);font-size:12px;padding:5px 9px;
+}
+.chip b{font-weight:600}
+
+/* ---------- resumen del filtro ---------- */
+.resumen{background:var(--card);border:1px solid var(--rule);padding:12px 14px;margin-bottom:10px;font-size:13.5px}
+.resumen .linea{display:flex;justify-content:space-between;gap:12px;padding:3px 0}
+.resumen .linea + .linea{border-top:1px dotted var(--rule-soft)}
+.resumen .cifrita{font-family:var(--mono);font-variant-numeric:tabular-nums;white-space:nowrap}
+.resumen .cifrita[data-lado="favor"]{color:var(--haber)}
+.resumen .cifrita[data-lado="debe"]{color:var(--debe)}
+
+/* ---------- movimientos ---------- */
+.movs{border-top:1px solid var(--ink);border-bottom:1px solid var(--ink)}
+.mov{
+  display:grid;grid-template-columns:52px 1fr auto 26px;align-items:baseline;gap:10px;
+  padding:9px 10px;border-bottom:1px solid var(--rule-soft);font-size:14px;
+}
+.mov:nth-child(odd){background:#DFE9DA}
+.mov:last-child{border-bottom:0}
+.mov .fecha{font-family:var(--mono);font-size:11px;color:var(--ink-soft);font-variant-numeric:tabular-nums}
+.mov .quien{font-weight:500}
+.mov .flecha{color:var(--ink-soft);font-weight:400;padding:0 2px}
+.mov .que{display:block;font-size:12px;color:var(--ink-soft);font-weight:400}
+.mov .monto{font-family:var(--mono);font-variant-numeric:tabular-nums;font-weight:500}
+.mov .monto[data-tipo="prestamo"]{color:var(--debe)}
+.mov .monto[data-tipo="pago"]{color:var(--haber)}
+.mov .borrar{background:none;border:0;color:var(--ink-soft);font-size:16px;line-height:1;padding:2px 4px;opacity:.5}
+.mov .borrar:hover{opacity:1;color:var(--debe)}
+.mov .pend{font-family:var(--mono);font-size:9px;letter-spacing:.1em;color:#8A6A1E}
+.mov.elegido{background:#EFF5EC;box-shadow:inset 3px 0 0 var(--ink)}
+.mov .marca{display:flex;justify-content:center;align-items:center}
+.mov input[type=checkbox],.lista-pers input[type=checkbox]{width:18px;height:18px;accent-color:var(--ink);margin:0;flex:none}
+
+/* ---------- barra de selección ---------- */
+.barra-sel{
+  display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;
+  background:var(--ink);color:var(--paper);padding:9px 12px;margin-bottom:10px;font-size:13px;
+}
+.barra-sel .grupo{display:flex;gap:6px;flex-wrap:wrap}
+.barra-sel .btn{border-color:var(--paper);color:var(--paper);background:transparent;padding:5px 10px;font-size:12px}
+.barra-sel .btn:hover{background:rgba(255,255,255,.15)}
+.barra-sel .btn.rojo{background:var(--debe);border-color:var(--debe)}
+.barra-sel .btn.rojo:hover{background:#8C2626}
+.barra-sel.clara{background:#EFF5EC;color:var(--ink);border:1px solid var(--ink)}
+.barra-sel.clara .btn{border-color:var(--ink);color:var(--ink)}
+.barra-sel.clara .btn:hover{background:#DCE6D7}
+.barra-sel.clara .btn.rojo{background:var(--debe);border-color:var(--debe);color:var(--paper)}
+mark{background:#F4E7A8;color:inherit;padding:0 1px}
+
+.vacio{border:1px dashed var(--rule);padding:20px 16px;text-align:center;font-size:14px;color:var(--ink-soft);background:var(--card)}
+
+/* ---------- botones ---------- */
+.acciones{display:flex;gap:8px;flex-wrap:wrap;margin-top:14px}
+.btn{border:1px solid var(--ink);background:var(--ink);color:var(--paper);padding:11px 16px;font-size:14px;font-weight:500}
+.btn:hover{background:#22322A}
+.btn.ghost{background:transparent;color:var(--ink)}
+.btn.ghost:hover{background:#DCE6D7}
+.btn.mini{padding:6px 10px;font-size:12px}
+.btn.peligro{border-color:var(--debe);color:var(--debe)}
+.btn.peligro:hover{background:#F3E3E3}
+.btn[disabled]{opacity:.45;cursor:default}
+
+/* ---------- hojas / formularios ---------- */
+.hoja{background:var(--card);border:1px solid var(--ink);padding:16px;margin-top:12px}
+.hoja h3{font-family:var(--display);font-size:19px;font-weight:700;margin:0 0 14px}
+.campo{margin-bottom:13px}
+.campo > label{display:block;font-family:var(--mono);font-size:10px;letter-spacing:.13em;text-transform:uppercase;color:var(--ink-soft);margin-bottom:5px}
+.campo input,.campo select{
+  width:100%;font-family:var(--sans);font-size:16px;color:var(--ink);background:#fff;
+  border:1px solid var(--rule);border-radius:0;padding:10px 11px;
+}
+.campo input[type=tel]{font-family:var(--mono);font-variant-numeric:tabular-nums}
+.campo input[type=url]{font-family:var(--mono);font-size:12px}
+.par{display:grid;grid-template-columns:1fr auto 1fr;gap:8px;align-items:end}
+.par .flechita{padding-bottom:11px;color:var(--ink-soft);font-size:18px}
+.tipos{display:grid;gap:6px}
+.tipo{display:flex;align-items:center;gap:9px;border:1px solid var(--rule);background:#fff;padding:9px 11px;font-size:14px}
+.tipo:has(input:checked){border-color:var(--ink);background:#F0F5EE}
+.tipo input{accent-color:var(--ink);margin:0;flex:none;width:auto}
+.tipo .signo{margin-left:auto;font-family:var(--mono);font-size:11px;color:var(--ink-soft)}
+.previo{border-left:3px solid var(--rule);background:#F0F5EE;padding:9px 12px;font-size:13.5px;margin-bottom:13px}
+.previo b{font-weight:600}
+.previo .efecto{display:block;color:var(--ink-soft);font-size:12.5px;margin-top:2px}
+.error{color:var(--debe);font-size:13px;margin:0 0 10px}
+.pista{font-size:12px;color:var(--ink-soft);margin:6px 0 0}
+.lista-pers{border-top:1px solid var(--rule-soft);margin-top:6px}
+.lista-pers .fila{display:flex;justify-content:space-between;align-items:center;gap:10px;padding:8px 0;border-bottom:1px solid var(--rule-soft);font-size:14px}
+.lista-pers .fila.elegida{background:#EFF5EC;box-shadow:inset 3px 0 0 var(--ink)}
+.lista-pers .fila > label{display:flex;align-items:center;gap:9px;flex:1;min-width:0;cursor:pointer;padding-left:6px}
+.lista-pers .quitar{background:none;border:0;color:var(--ink-soft);font-size:15px;padding:2px 6px;opacity:.6}
+.lista-pers .quitar:hover{opacity:1;color:var(--debe)}
+
+.pie{padding:24px 20px 0;font-size:12px;color:var(--ink-soft);border-top:1px solid var(--rule);margin-top:26px}
+
+@media (prefers-reduced-motion:no-preference){
+  .hoja{animation:aparece .18s ease-out}
+  @keyframes aparece{from{opacity:0;transform:translateY(-4px)}to{opacity:1;transform:none}}
+}
+</style>
+</head>
+<body>
+<div class="marca-agua" aria-hidden="true"><span>Juan José Franco<br>Velásquez</span></div>
+<div id="app">
+  <header class="ledger-head">
+    <h1>Cuentas claras</h1>
+    <div class="sub">Préstamos de la familia</div>
+    <div class="neto">
+      <span class="etiqueta" id="neto-etiqueta">Cargando…</span>
+      <span class="cifra" id="neto-cifra">—</span>
+    </div>
+  </header>
+
+  <div class="estado" id="estado" data-tono="neutro">
+    <span class="texto"><span class="punto"></span><span id="estado-texto">Cargando…</span></span>
+    <button class="btn ghost mini" id="b-sync">Sincronizar</button>
+  </div>
+
+  <section class="bloque">
+    <div class="acciones">
+      <button class="btn" id="b-nuevo">Registrar movimiento</button>
+      <button class="btn ghost" id="b-persona">Personas</button>
+    </div>
+    <div id="panel"></div>
+  </section>
+
+  <section class="bloque">
+    <h2>Quién le debe a quién</h2>
+    <div class="deudas" id="deudas"></div>
+  </section>
+
+  <section class="bloque">
+    <h2>Por persona</h2>
+    <div class="personas" id="personas"></div>
+  </section>
+
+  <section class="bloque">
+    <h2><span id="titulo-movs">Movimientos</span>
+      <button class="btn ghost mini" id="b-sel">Seleccionar</button></h2>
+    <div class="buscador">
+      <input type="search" id="buscar" placeholder="Buscar por nombre, nota o monto" autocomplete="off">
+      <button class="limpiar" id="b-limpiar" aria-label="Limpiar búsqueda" hidden>×</button>
+    </div>
+    <div class="chips" id="chips"></div>
+    <div id="resumen"></div>
+    <div id="barra-sel"></div>
+    <div id="movs"></div>
+  </section>
+
+  <section class="bloque">
+    <div class="acciones">
+      <button class="btn ghost mini" id="b-clave">Mi contraseña</button>
+      <button class="btn ghost mini" id="b-permisos">Permisos</button>
+      <button class="btn ghost mini" id="b-config">Conexión con la hoja</button>
+      <button class="btn ghost mini peligro" id="b-borrar-todo">Borrar todo</button>
+      <button class="btn ghost mini peligro" id="b-salir">Cerrar sesión</button>
+    </div>
+    <p class="quien-soy" id="quien-soy"></p>
+    <div id="panel2"></div>
+  </section>
+
+  <p class="pie" id="pie">Todo se guarda primero en este dispositivo, así que puedes registrar sin señal. Cuando hay internet, los cambios suben solos a la hoja de Google.<br>
+    <span style="font-family:var(--mono);font-size:10px;letter-spacing:.1em">VERSIÓN 12 AGO 2026 · CON INTERESES, CONTRASEÑAS Y PERMISOS</span>
+    <span class="firma">Hecho por Juan José Franco Velásquez</span></p>
+</div>
+
+<div id="ficha"></div>
+<div id="puerta"></div>
+
+<script>
+(function () {
+  'use strict';
+
+  var CLAVE = 'cuentas-familia-v3';
+  var CLAVE_VIEJA = 'cuentas-papa-v2';
+  var DUENO = 'jujofrave@gmail.com';
+
+  // Pega aquí la dirección /exec una sola vez, antes de subir la app.
+  // Así nadie más tiene que escribirla ni verla en pantalla.
+  var URL_HOJA = 'https://script.google.com/macros/s/AKfycbzwpYX9N9FdK1_-tvXRxMtdBV-HWbJXTbxWHNWg6Tj35tZh_g-G6KvZhXIyhPWy7XAG/exec';
+
+  var TIPOS = {
+    prestamo: { texto: 'Préstamo',      corto: 'Préstamo' },
+    pago:     { texto: 'Pago o abono',  corto: 'Pago' }
+  };
+
+  var datos = { personas: [], movs: [], permisos: [], sesion: '', ficha: '', url: '', ultimoSync: 0 };
+  var ultimoCorreo = '';
+  var filtro = null;
+  var busqueda = '';
+  var modoSel = false;
+  var elegidos = {};
+  var modoSelPers = false;
+  var elegidas = {};
+  var listo = false;
+  var sincronizando = false;
+  var ultimoError = '';
+  var temporizador = null;
+
+  var $ = function (id) { return document.getElementById(id); };
+  var panel = $('panel');
+  var panel2 = $('panel2');
+
+  /* ---------- almacenamiento local ---------- */
+  var almacen = {
+    get: function (k) {
+      if (window.storage) {
+        return window.storage.get(k).then(function (r) { return r && r.value; }, function () { return null; });
+      }
+      try { return Promise.resolve(localStorage.getItem(k)); } catch (e) { return Promise.resolve(null); }
+    },
+    set: function (k, v) {
+      if (window.storage) return window.storage.set(k, v);
+      try { localStorage.setItem(k, v); } catch (e) {}
+      return Promise.resolve();
+    }
+  };
+
+  /* ---------- utilidades ---------- */
+  function plata(n) { return '$' + Math.round(Math.abs(n)).toLocaleString('es-CO'); }
+
+  function hoy() {
+    var d = new Date();
+    return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
+  }
+
+  function fechaCorta(iso) {
+    var p = String(iso).split('-');
+    var meses = ['ene','feb','mar','abr','may','jun','jul','ago','sep','oct','nov','dic'];
+    return p[2] ? p[2].replace(/^0/, '') + ' ' + meses[+p[1] - 1] : iso;
+  }
+
+  function esc(s) {
+    return String(s).replace(/[&<>"']/g, function (c) {
+      return { '&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;', "'":'&#39;' }[c];
+    });
+  }
+
+  function sinTildes(s) {
+    return String(s).toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+  }
+
+  function resaltar(texto) {
+    var t = esc(texto);
+    if (!busqueda) return t;
+    var aguja = sinTildes(busqueda);
+    var plano = sinTildes(t);
+    var i = plano.indexOf(aguja);
+    if (i < 0) return t;
+    return t.slice(0, i) + '<mark>' + t.slice(i, i + aguja.length) + '</mark>' + t.slice(i + aguja.length);
+  }
+
+  function personasVivas() {
+    return datos.personas.filter(function (p) { return !p.borrado; })
+      .sort(function (a, b) { return a.nombre.localeCompare(b.nombre, 'es'); });
+  }
+
+  /** En la pantalla principal, quien no administra solo se ve a sí mismo y a sus contrapartes. */
+  function personasVisibles() {
+    if (veTodo()) return personasVivas();
+    var yo = miPersona();
+    if (!yo) return [];
+    var conocidas = {};
+    conocidas[yo] = true;
+    movsVivos().forEach(function (m) { conocidas[m.de] = true; conocidas[m.a] = true; });
+    return personasVivas().filter(function (p) { return conocidas[p.nombre]; });
+  }
+
+  /** Todo lo que se muestra pasa por aquí, así la privacidad no depende de cada pantalla. */
+  function movsVivos() {
+    var todo = veTodo();
+    var yo = todo ? null : miPersona();
+    return datos.movs.filter(function (m) {
+      if (m.borrado) return false;
+      if (todo) return true;
+      return !!yo && (m.de === yo || m.a === yo);
+    });
+  }
+
+  /** Sin filtrar por visibilidad: para guardar y borrar, no para mostrar. */
+  function movsTodos() { return datos.movs.filter(function (m) { return !m.borrado; }); }
+
+  /**
+   * La plata que va de una persona a otra siempre reduce lo que el que da
+   * le debía al que recibe, y aumenta lo que el que recibe le debe.
+   * Los intereses causados se suman aparte, porque no son plata que se movió.
+   */
+  function deudaEntre(x, y) {
+    // positivo: y le debe a x
+    var neto = movsVivos().reduce(function (t, m) {
+      if (m.de === x && m.a === y) return t + m.monto;
+      if (m.de === y && m.a === x) return t - m.monto;
+      return t;
+    }, 0);
+    return neto + interesEntre(x, y) - interesEntre(y, x);
+  }
+
+  function deudas() {
+    var nombres = nombresConocidos();
+    var salida = [];
+    for (var i = 0; i < nombres.length; i++) {
+      for (var j = i + 1; j < nombres.length; j++) {
+        var v = deudaEntre(nombres[i], nombres[j]);
+        if (cero(v)) continue;
+        salida.push(v > 0
+          ? { acreedor: nombres[i], deudor: nombres[j], monto: v }
+          : { acreedor: nombres[j], deudor: nombres[i], monto: -v });
+      }
+    }
+    return salida.sort(function (a, b) { return b.monto - a.monto; });
+  }
+
+  function saldoPersona(nombre) {
+    return nombresConocidos().reduce(function (t, o) {
+      return o === nombre ? t : t + deudaEntre(nombre, o);
+    }, 0);
+  }
+
+  /** Todos los nombres que aparecen, aunque la persona ya se haya quitado de la lista. */
+  function nombresConocidos() {
+    var vistos = {};
+    personasVisibles().forEach(function (p) { vistos[p.nombre] = true; });
+    movsVivos().forEach(function (m) { vistos[m.de] = true; vistos[m.a] = true; });
+    return Object.keys(vistos).sort(function (a, b) { return a.localeCompare(b, 'es'); });
+  }
+
+  /**
+   * Separa las dos caras de una persona: lo que le deben y lo que debe.
+   * Cada relación va neteada, así que con la misma persona nunca aparecen
+   * las dos cosas a la vez, pero con personas distintas sí.
+   */
+  function detalle(nombre) {
+    var leDeben = [], debeA = [];
+    nombresConocidos().forEach(function (o) {
+      if (o === nombre) return;
+      var v = deudaEntre(nombre, o);
+      if (cero(v)) return;
+      if (v > 0) leDeben.push({ quien: o, monto: v });
+      else debeA.push({ quien: o, monto: -v });
+    });
+    var mayor = function (a, b) { return b.monto - a.monto; };
+    leDeben.sort(mayor);
+    debeA.sort(mayor);
+    var favor = leDeben.reduce(function (t, r) { return t + r.monto; }, 0);
+    var debe = debeA.reduce(function (t, r) { return t + r.monto; }, 0);
+    return { leDeben: leDeben, debeA: debeA, favor: favor, debe: debe, neto: favor - debe };
+  }
+
+  /* ---------- préstamos, abonos e intereses ---------- */
+
+  var PERIODOS = {
+    '':          { texto: 'Sin intereses',                    dias: 0 },
+    mensual:     { texto: 'Mensual',                          dias: 30 },
+    trimestral:  { texto: 'Trimestral',                       dias: 90 },
+    semestral:   { texto: 'Semestral',                        dias: 180 },
+    anual:       { texto: 'Anual',                            dias: 365 },
+    fijo:        { texto: 'Fijo sobre el total del préstamo', dias: 0 }
+  };
+
+  function esPrestamo(m) { return m.tipo === 'prestamo'; }
+
+  function cero(v) { return Math.abs(v) < 1; }
+
+  function diasEntre(a, b) {
+    var ms = Date.parse(String(b) + 'T00:00:00Z') - Date.parse(String(a) + 'T00:00:00Z');
+    return isNaN(ms) ? 0 : Math.max(0, ms / 86400000);
+  }
+
+  function abonosDe(idPrestamo) {
+    var ref = String(idPrestamo);
+    return movsVivos().filter(function (m) {
+      return m.tipo === 'pago' && String(m.ref || '') === ref;
+    }).sort(function (a, b) { return a.fecha === b.fecha ? a.id - b.id : (a.fecha < b.fecha ? -1 : 1); });
+  }
+
+  /**
+   * Recorre el préstamo día por día: los abonos bajan primero el capital y,
+   * cuando el capital llega a cero, el interés deja de correr. Lo que sobre
+   * de los abonos va contra los intereses ya causados.
+   */
+  function estadoPrestamo(l) {
+    var tasa = Number(l.tasa) || 0;
+    var periodo = PERIODOS[l.periodo] ? l.periodo : '';
+    var capital = l.monto;
+    var causado = (periodo === 'fijo') ? l.monto * tasa / 100 : 0;
+    var pagadoInteres = 0;
+    var porDia = (periodo && periodo !== 'fijo' && tasa)
+      ? (tasa / 100) / PERIODOS[periodo].dias
+      : 0;
+
+    var fecha = l.fecha;
+
+    function correr(hasta) {
+      if (porDia && capital > 0) causado += capital * porDia * diasEntre(fecha, hasta);
+      if (Date.parse(hasta + 'T00:00:00Z') > Date.parse(fecha + 'T00:00:00Z')) fecha = hasta;
+    }
+
+    abonosDe(l.id).forEach(function (p) {
+      correr(p.fecha);
+      var aCapital = Math.min(p.monto, capital);
+      capital -= aCapital;
+      pagadoInteres += p.monto - aCapital;
+    });
+    correr(hoy());
+
+    var pendiente = Math.max(0, causado - pagadoInteres);
+    var abonado = l.monto - capital + Math.min(pagadoInteres, causado);
+
+    return {
+      capital: capital,
+      causado: causado,
+      interes: pendiente,
+      abonado: abonado,
+      total: capital + pendiente,
+      conInteres: !!(tasa && periodo),
+      detenido: !!porDia && cero(capital),
+      saldado: cero(capital) && cero(pendiente)
+    };
+  }
+
+  function saldoPrestamo(p) { return estadoPrestamo(p).total; }
+
+  function abonado(idPrestamo) {
+    return abonosDe(idPrestamo).reduce(function (t, m) { return t + m.monto; }, 0);
+  }
+
+  function tasaTexto(l) {
+    var tasa = Number(l.tasa) || 0;
+    if (!tasa || !l.periodo) return '';
+    if (l.periodo === 'fijo') return tasa + '% fijo';
+    return tasa + '% ' + PERIODOS[l.periodo].texto.toLowerCase();
+  }
+
+  function prestamoPorId(id) {
+    var ref = String(id || '');
+    if (!ref) return null;
+    return movsVivos().filter(function (m) { return esPrestamo(m) && String(m.id) === ref; })[0] || null;
+  }
+
+  /** Préstamos que le hizo el acreedor al deudor, del más viejo al más nuevo. */
+  function prestamosEntre(acreedor, deudor) {
+    return movsVivos()
+      .filter(function (m) { return esPrestamo(m) && m.de === acreedor && m.a === deudor; })
+      .sort(function (a, b) { return a.fecha === b.fecha ? a.id - b.id : (a.fecha < b.fecha ? -1 : 1); });
+  }
+
+  /** Interés ya causado por todo lo que el acreedor le prestó al deudor. */
+  function interesEntre(acreedor, deudor) {
+    return prestamosEntre(acreedor, deudor).reduce(function (t, l) {
+      return t + estadoPrestamo(l).causado;
+    }, 0);
+  }
+
+  function prestamosDe(nombre) {
+    return movsVivos()
+      .filter(function (m) { return esPrestamo(m) && (m.de === nombre || m.a === nombre); })
+      .sort(function (a, b) {
+        var sa = estadoPrestamo(a).saldado ? 1 : 0;
+        var sb = estadoPrestamo(b).saldado ? 1 : 0;
+        if (sa !== sb) return sa - sb;
+        return a.fecha === b.fecha ? b.id - a.id : (a.fecha < b.fecha ? 1 : -1);
+      });
+  }
+
+  /** Texto corto que explica en qué va un préstamo o a cuál se le abonó. */
+  function detalleMov(m) {
+    if (esPrestamo(m)) {
+      var e = estadoPrestamo(m);
+      var partes = [];
+      if (e.conInteres) partes.push(tasaTexto(m));
+      if (e.saldado) partes.push('saldado');
+      else if (e.abonado || e.interes) partes.push('quedan ' + plata(e.total));
+      return partes.length ? ' · ' + partes.join(' · ') : '';
+    }
+    if (!m.ref) return '';
+    var l = prestamoPorId(m.ref);
+    return l ? ' · abono al préstamo del ' + fechaCorta(l.fecha) : '';
+  }
+
+  function pendientes() {
+    var n = 0;
+    datos.personas.forEach(function (p) { if (p.actualizado > datos.ultimoSync) n++; });
+    datos.movs.forEach(function (m) { if (m.actualizado > datos.ultimoSync) n++; });
+    return n;
+  }
+
+  /* ---------- persistencia ---------- */
+  function guardar() { return almacen.set(CLAVE, JSON.stringify(datos)); }
+
+  function cargar() {
+    return almacen.get(CLAVE).then(function (crudo) {
+      if (crudo) {
+        try {
+          var d = JSON.parse(crudo);
+          datos = {
+            personas: d.personas || [],
+            movs: d.movs || [],
+            permisos: d.permisos || [],
+            sesion: d.sesion || '',
+            ficha: d.ficha || '',
+            url: d.url || '',
+            ultimoSync: d.ultimoSync || 0
+          };
+        } catch (e) {}
+        return null;
+      }
+      return almacen.get(CLAVE_VIEJA).then(convertirVersionVieja);
+    }).then(function () {
+      if (!datos.url && URL_HOJA) datos.url = URL_HOJA;
+      asegurarDueno();
+      listo = true;
+      pintar();
+      if (datos.url) sincronizar(true);
+    });
+  }
+
+  /* ---------- permisos ---------- */
+
+  function normCorreo(c) { return String(c || '').trim().toLowerCase(); }
+
+  var LLAVES = ['entrar', 'editarPers', 'borrarMovs', 'borrarPers', 'admin'];
+
+  var NOMBRE_LLAVE = {
+    entrar: 'Pueden entrar a la app',
+    editarPers: 'Pueden crear y editar personas',
+    borrarMovs: 'Pueden eliminar movimientos',
+    borrarPers: 'Pueden eliminar personas',
+    admin: 'Pueden ver y dar permisos'
+  };
+
+  var CORTO_LLAVE = { entrar: 'ENTRA', editarPers: 'EDITA PERS', borrarMovs: 'BORRA MOVS',
+                      borrarPers: 'BORRA PERS', admin: 'ADMINISTRA' };
+
+  /** Los permisos viejos tenían una sola llave "borrar"; se reparte en las tres nuevas. */
+  function migrarPermisos() {
+    datos.permisos.forEach(function (p) {
+      if (p.borrarMovs === undefined && p.borrar !== undefined) {
+        p.borrarMovs = !!p.borrar;
+        p.borrarPers = !!p.borrar;
+        p.admin = !!p.borrar;
+      }
+      // quien ya podía borrar personas, con más razón puede editarlas
+      if (p.editarPers === undefined) p.editarPers = !!p.borrarPers;
+      LLAVES.forEach(function (k) { if (p[k] === undefined) p[k] = false; });
+      delete p.borrar;
+    });
+  }
+
+  /** El correo del dueño siempre existe y siempre conserva sus cuatro permisos. */
+  function asegurarDueno() {
+    migrarPermisos();
+    var d = datos.permisos.filter(function (p) { return normCorreo(p.correo) === DUENO; })[0];
+    if (!d) {
+      d = { correo: DUENO, sal: '', hash: '', protegido: true, borrado: false, actualizado: Date.now() };
+      LLAVES.forEach(function (k) { d[k] = true; });
+      datos.permisos.push(d);
+      return;
+    }
+    var faltaba = !d.protegido || d.borrado || LLAVES.some(function (k) { return !d[k]; });
+    if (faltaba) {
+      LLAVES.forEach(function (k) { d[k] = true; });
+      d.protegido = true;
+      d.borrado = false;
+      d.actualizado = Date.now();
+    }
+  }
+
+  function permisosVivos() {
+    return datos.permisos.filter(function (p) { return !p.borrado; })
+      .sort(function (a, b) {
+        if (!!a.protegido !== !!b.protegido) return a.protegido ? -1 : 1;
+        return a.correo.localeCompare(b.correo);
+      });
+  }
+
+  function permisoDe(correo) {
+    var c = normCorreo(correo);
+    return permisosVivos().filter(function (p) { return normCorreo(p.correo) === c; })[0] || null;
+  }
+
+  function puedeEntrar(correo) {
+    var p = permisoDe(correo);
+    return !!(p && p.entrar);
+  }
+
+  function tengo(llave) {
+    var p = permisoDe(datos.sesion);
+    return !!(p && p.entrar && p[llave]);
+  }
+
+  function puedeEditarPers() { return tengo('editarPers'); }
+  function puedeBorrarMovs() { return tengo('borrarMovs'); }
+  function puedeBorrarPers() { return tengo('borrarPers'); }
+  function esAdmin() { return tengo('admin'); }
+  function esDueno() { return normCorreo(datos.sesion) === DUENO; }
+
+  /* ---------- ver la contraseña ---------- */
+
+  function dibujoOjo(abierto) {
+    var comun = 'fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"';
+    return abierto
+      ? '<svg viewBox="0 0 24 24" aria-hidden="true">' +
+        '<path ' + comun + ' d="M1.8 12S5.6 5.2 12 5.2 22.2 12 22.2 12 18.4 18.8 12 18.8 1.8 12 1.8 12Z"/>' +
+        '<circle ' + comun + ' cx="12" cy="12" r="3.2"/></svg>'
+      : '<svg viewBox="0 0 24 24" aria-hidden="true">' +
+        '<path ' + comun + ' d="M9.9 5.5A9.6 9.6 0 0 1 12 5.2c6.4 0 10.2 6.8 10.2 6.8a19 19 0 0 1-3.3 4.2"/>' +
+        '<path ' + comun + ' d="M6.4 7.3A18.6 18.6 0 0 0 1.8 12S5.6 18.8 12 18.8a9.9 9.9 0 0 0 4-.8"/>' +
+        '<path ' + comun + ' d="M9.8 9.9a3.2 3.2 0 0 0 4.4 4.4"/>' +
+        '<path ' + comun + ' d="M3.4 3.4l17.2 17.2"/></svg>';
+  }
+
+  /** Le pone el ojo a todos los campos de contraseña que haya dentro. */
+  function ponerOjos(raiz) {
+    if (!raiz) return;
+    Array.prototype.forEach.call(raiz.querySelectorAll('input[type=password]'), function (campo) {
+      if (campo.parentNode && campo.parentNode.className === 'con-ojo') return;
+
+      var caja = document.createElement('span');
+      caja.className = 'con-ojo';
+      campo.parentNode.insertBefore(caja, campo);
+      caja.appendChild(campo);
+
+      var boton = document.createElement('button');
+      boton.type = 'button';
+      boton.className = 'ojo';
+      boton.innerHTML = dibujoOjo(false);
+      boton.setAttribute('aria-label', 'Mostrar contraseña');
+      boton.setAttribute('aria-pressed', 'false');
+
+      boton.onclick = function () {
+        var mostrar = campo.type === 'password';
+        campo.type = mostrar ? 'text' : 'password';
+        boton.innerHTML = dibujoOjo(mostrar);
+        boton.setAttribute('aria-label', mostrar ? 'Ocultar contraseña' : 'Mostrar contraseña');
+        boton.setAttribute('aria-pressed', mostrar ? 'true' : 'false');
+        campo.focus();
+        var n = campo.value.length;
+        try { campo.setSelectionRange(n, n); } catch (e) {}
+      };
+
+      caja.appendChild(boton);
+    });
+  }
+
+  /* ---------- contraseñas ---------- */
+
+  function sha256Hex(mensaje) {
+    var K = [
+      0x428a2f98,0x71374491,0xb5c0fbcf,0xe9b5dba5,0x3956c25b,0x59f111f1,0x923f82a4,0xab1c5ed5,
+      0xd807aa98,0x12835b01,0x243185be,0x550c7dc3,0x72be5d74,0x80deb1fe,0x9bdc06a7,0xc19bf174,
+      0xe49b69c1,0xefbe4786,0x0fc19dc6,0x240ca1cc,0x2de92c6f,0x4a7484aa,0x5cb0a9dc,0x76f988da,
+      0x983e5152,0xa831c66d,0xb00327c8,0xbf597fc7,0xc6e00bf3,0xd5a79147,0x06ca6351,0x14292967,
+      0x27b70a85,0x2e1b2138,0x4d2c6dfc,0x53380d13,0x650a7354,0x766a0abb,0x81c2c92e,0x92722c85,
+      0xa2bfe8a1,0xa81a664b,0xc24b8b70,0xc76c51a3,0xd192e819,0xd6990624,0xf40e3585,0x106aa070,
+      0x19a4c116,0x1e376c08,0x2748774c,0x34b0bcb5,0x391c0cb3,0x4ed8aa4a,0x5b9cca4f,0x682e6ff3,
+      0x748f82ee,0x78a5636f,0x84c87814,0x8cc70208,0x90befffa,0xa4506ceb,0xbef9a3f7,0xc67178f2];
+    var H = [0x6a09e667,0xbb67ae85,0x3c6ef372,0xa54ff53a,0x510e527f,0x9b05688c,0x1f83d9ab,0x5be0cd19];
+
+    var bytes = [];
+    for (var i = 0; i < mensaje.length; i++) {
+      var c = mensaje.charCodeAt(i);
+      if (c < 0x80) bytes.push(c);
+      else if (c < 0x800) bytes.push(0xc0 | (c >> 6), 0x80 | (c & 63));
+      else if (c < 0xd800 || c >= 0xe000) bytes.push(0xe0 | (c >> 12), 0x80 | ((c >> 6) & 63), 0x80 | (c & 63));
+      else { i++; c = 0x10000 + (((c & 0x3ff) << 10) | (mensaje.charCodeAt(i) & 0x3ff));
+        bytes.push(0xf0 | (c >> 18), 0x80 | ((c >> 12) & 63), 0x80 | ((c >> 6) & 63), 0x80 | (c & 63)); }
+    }
+
+    var bits = bytes.length * 8;
+    bytes.push(0x80);
+    while (bytes.length % 64 !== 56) bytes.push(0);
+    var alto = Math.floor(bits / 4294967296), bajo = bits >>> 0;
+    bytes.push((alto>>>24)&255,(alto>>>16)&255,(alto>>>8)&255,alto&255,
+               (bajo>>>24)&255,(bajo>>>16)&255,(bajo>>>8)&255,bajo&255);
+
+    var w = new Array(64);
+    for (var pos = 0; pos < bytes.length; pos += 64) {
+      for (var t = 0; t < 16; t++) {
+        w[t] = (bytes[pos+t*4]<<24) | (bytes[pos+t*4+1]<<16) | (bytes[pos+t*4+2]<<8) | bytes[pos+t*4+3];
+      }
+      for (t = 16; t < 64; t++) {
+        var g0 = w[t-15], g1 = w[t-2];
+        var s0 = ((g0>>>7)|(g0<<25)) ^ ((g0>>>18)|(g0<<14)) ^ (g0>>>3);
+        var s1 = ((g1>>>17)|(g1<<15)) ^ ((g1>>>19)|(g1<<13)) ^ (g1>>>10);
+        w[t] = (w[t-16] + s0 + w[t-7] + s1) | 0;
+      }
+      var a=H[0],b=H[1],c2=H[2],d=H[3],e=H[4],f=H[5],g=H[6],h=H[7];
+      for (t = 0; t < 64; t++) {
+        var S1 = ((e>>>6)|(e<<26)) ^ ((e>>>11)|(e<<21)) ^ ((e>>>25)|(e<<7));
+        var ch = (e & f) ^ (~e & g);
+        var t1 = (h + S1 + ch + K[t] + w[t]) | 0;
+        var S0 = ((a>>>2)|(a<<30)) ^ ((a>>>13)|(a<<19)) ^ ((a>>>22)|(a<<10));
+        var maj = (a & b) ^ (a & c2) ^ (b & c2);
+        var t2 = (S0 + maj) | 0;
+        h=g; g=f; f=e; e=(d+t1)|0; d=c2; c2=b; b=a; a=(t1+t2)|0;
+      }
+      H[0]=(H[0]+a)|0; H[1]=(H[1]+b)|0; H[2]=(H[2]+c2)|0; H[3]=(H[3]+d)|0;
+      H[4]=(H[4]+e)|0; H[5]=(H[5]+f)|0; H[6]=(H[6]+g)|0; H[7]=(H[7]+h)|0;
+    }
+
+    var hex = '';
+    for (i = 0; i < 8; i++) hex += ('00000000' + (H[i] >>> 0).toString(16)).slice(-8);
+    return hex;
+  }
+
+  function salAleatoria() {
+    var s = '';
+    if (window.crypto && window.crypto.getRandomValues) {
+      var b = new Uint8Array(16);
+      window.crypto.getRandomValues(b);
+      for (var i = 0; i < b.length; i++) s += ('0' + b[i].toString(16)).slice(-2);
+      return s;
+    }
+    for (var j = 0; j < 32; j++) s += Math.floor(Math.random() * 16).toString(16);
+    return s;
+  }
+
+  /**
+   * La contraseña nunca se guarda: se guarda esta huella, que no se puede
+   * devolver. Las vueltas encarecen el probar claves una por una.
+   */
+  function hashClave(clave, sal) {
+    var h = sal + ':' + clave;
+    for (var i = 0; i < 500; i++) h = sha256Hex(h + ':' + sal);
+    return h;
+  }
+
+  /** Llave de sesión: cambia sola si cambia la contraseña, así se cierran las sesiones viejas. */
+  function fichaDe(hash, correo) { return sha256Hex(hash + ':' + normCorreo(correo)); }
+
+  function tieneClave(p) { return !!(p && p.hash && p.sal); }
+
+  function claveCorrecta(p, clave) {
+    return tieneClave(p) && hashClave(clave, p.sal) === p.hash;
+  }
+
+  /* ---------- qué alcanza a ver cada quien ---------- */
+
+  /** La persona de la familia cuyo correo coincide con el de la sesión. */
+  function miPersona() {
+    var c = normCorreo(datos.sesion);
+    if (!c) return null;
+    var p = datos.personas.filter(function (x) { return !x.borrado && normCorreo(x.correo) === c; })[0];
+    return p ? p.nombre : null;
+  }
+
+  /** Quien administra ve todas las cuentas; los demás solo las suyas. */
+  function veTodo() { return esAdmin(); }
+
+  /* ---------- puerta de entrada ---------- */
+
+  function sesionValida() { return !!datos.sesion && puedeEntrar(datos.sesion); }
+
+  function pintarPuerta(mensaje, tono) {
+    var caja = $('puerta');
+    if (sesionValida()) { caja.innerHTML = ''; document.body.style.overflow = fichaAbierta ? 'hidden' : ''; return; }
+
+    caja.innerHTML =
+      '<div class="puerta"><div class="caja">' +
+        '<h2>Cuentas claras</h2>' +
+        '<div class="sub">Préstamos de la familia</div>' +
+        (mensaje ? '<p class="' + (tono === 'aviso' ? 'pista' : 'error') + '">' + esc(mensaje) + '</p>' : '') +
+        '<div class="campo"><label for="pu-correo">Tu correo</label>' +
+        '<input type="email" id="pu-correo" autocomplete="username" inputmode="email" spellcheck="false" ' +
+        'placeholder="tucorreo@gmail.com" value="' + esc(ultimoCorreo || '') + '"></div>' +
+        '<div class="campo"><label for="pu-clave">Contraseña</label>' +
+        '<input type="password" id="pu-clave" autocomplete="current-password" placeholder="••••••••"></div>' +
+        '<div class="acciones"><button class="btn" id="pu-entrar">Entrar</button></div>' +
+        '<p class="firma" style="margin-top:18px">Juan José Franco Velásquez</p>' +
+        '<p class="aviso">Solo entran los correos autorizados. Si todavía no tienes contraseña, deja el campo vacío ' +
+        'y podrás ponerla adentro. Si la olvidaste, quien administra puede cambiártela.</p>' +
+      '</div></div>';
+
+    document.body.style.overflow = 'hidden';
+    ponerOjos(caja);
+    var campoCorreo = $('pu-correo'), campoClave = $('pu-clave');
+    (campoCorreo.value ? campoClave : campoCorreo).focus();
+    campoClave.onkeydown = function (ev) { if (ev.key === 'Enter') $('pu-entrar').click(); };
+    campoCorreo.onkeydown = function (ev) { if (ev.key === 'Enter') campoClave.focus(); };
+
+    $('pu-entrar').onclick = function () {
+      var c = normCorreo(campoCorreo.value);
+      var clave = campoClave.value;
+      ultimoCorreo = c;
+      if (!c) { pintarPuerta('Escribe tu correo.'); return; }
+
+      var p = permisoDe(c);
+
+      // Sin el permiso guardado en este dispositivo hay que preguntarle a la hoja.
+      if (!p) { entrarConLaHoja(c, clave); return; }
+      if (!p.entrar) { pintarPuerta('El correo ' + c + ' no tiene acceso a esta app.'); return; }
+
+      if (tieneClave(p)) {
+        if (!claveCorrecta(p, clave)) { pintarPuerta('Contraseña incorrecta.'); return; }
+        datos.ficha = fichaDe(p.hash, c);
+      } else {
+        datos.ficha = '';
+      }
+
+      datos.sesion = c;
+      guardar().then(function () { pintarPuerta(); pintar(); invitarAClave(); });
+    };
+  }
+
+  /** Si la persona todavía no tiene contraseña, se le ofrece ponerla apenas entra. */
+  function invitarAClave() {
+    var p = permisoDe(datos.sesion);
+    if (!p || tieneClave(p)) return;
+    formClave(datos.sesion);
+    var caja = panel2.querySelector('.hoja');
+    if (caja) caja.scrollIntoView({ behavior: 'smooth', block: 'center' });
+  }
+
+  /** Primera entrada en un dispositivo: la hoja confirma el correo y la contraseña. */
+  function entrarConLaHoja(correo, clave) {
+    if (!datos.url) {
+      pintarPuerta('Este dispositivo todavía no conoce ese correo y no hay hoja conectada.');
+      return;
+    }
+    if (!navigator.onLine) {
+      pintarPuerta('La primera entrada en un dispositivo necesita internet.');
+      return;
+    }
+
+    $('pu-entrar').disabled = true;
+    $('pu-entrar').textContent = 'Entrando…';
+
+    conTiempo(fetch(datos.url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+      body: JSON.stringify({ accion: 'entrar', correo: correo, clave: clave }),
+      redirect: 'follow'
+    }))
+      .then(function (r) { return r.json(); })
+      .then(function (resp) {
+        if (resp.error) { pintarPuerta(resp.error); return; }
+        fusionar(resp);
+        datos.sesion = correo;
+        datos.ficha = resp.ficha || '';
+        datos.ultimoSync = Date.now();
+        return guardar().then(function () { pintarPuerta(); pintar(); invitarAClave(); });
+      })
+      .catch(function (err) { pintarPuerta(mensajeError(err)); });
+  }
+
+  function cerrarSesion() {
+    datos.sesion = '';
+    datos.ficha = '';
+    guardar().then(function () { pintar(); pintarPuerta(); });
+  }
+
+  /** Rescata los datos de la versión que solo llevaba las cuentas de papá. */
+  function convertirVersionVieja(crudo) {
+    if (!crudo) return;
+    try {
+      var d = JSON.parse(crudo);
+      var haciaPapa = { pago_a_papa: 1, presto_a_papa: 1 };
+      datos.url = d.url || '';
+      datos.personas = (d.personas || []).map(function (p) {
+        return typeof p === 'string' ? { nombre: p, borrado: false, actualizado: Date.now() } : p;
+      });
+      if (!datos.personas.some(function (p) { return sinTildes(p.nombre) === 'papa'; })) {
+        datos.personas.push({ nombre: 'Papá', borrado: false, actualizado: Date.now() });
+      }
+      datos.movs = (d.movs || []).map(function (m) {
+        var suyo = haciaPapa[m.tipo];
+        return {
+          id: m.id,
+          fecha: m.fecha,
+          de: suyo ? m.persona : 'Papá',
+          a: suyo ? 'Papá' : m.persona,
+          tipo: (m.tipo === 'papa_presto' || m.tipo === 'presto_a_papa') ? 'prestamo' : 'pago',
+          monto: m.monto,
+          nota: m.nota || '',
+          borrado: !!m.borrado,
+          actualizado: Date.now()
+        };
+      });
+      datos.ultimoSync = 0;
+      return guardar();
+    } catch (e) {}
+  }
+
+  function registrar(fn) {
+    fn();
+    return guardar().then(function () { pintar(); programarSync(); });
+  }
+
+  function programarSync() {
+    if (!datos.url) return;
+    clearTimeout(temporizador);
+    temporizador = setTimeout(function () { sincronizar(true); }, 1200);
+  }
+
+  /* ---------- sincronización ---------- */
+  function sincronizar(silencioso) {
+    if (sincronizando) return Promise.resolve();
+    if (!datos.url) {
+      if (!silencioso) ultimoError = 'Falta conectar la hoja.';
+      pintarEstado();
+      return Promise.resolve();
+    }
+    if (!navigator.onLine) { pintarEstado(); return Promise.resolve(); }
+
+    sincronizando = true;
+    ultimoError = '';
+    pintarEstado();
+
+    var corte = Date.now();
+    var envio = { correo: datos.sesion, ficha: datos.ficha, personas: [], movs: [], permisos: [] };
+    datos.personas.forEach(function (p) { if (p.actualizado > datos.ultimoSync) envio.personas.push(p); });
+    datos.movs.forEach(function (m) { if (m.actualizado > datos.ultimoSync) envio.movs.push(m); });
+    datos.permisos.forEach(function (p) { if (p.actualizado > datos.ultimoSync) envio.permisos.push(p); });
+
+    return conTiempo(fetch(datos.url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+      body: JSON.stringify(envio),
+      redirect: 'follow'
+    }))
+      .then(function (r) {
+        if (!r.ok) throw new Error('La hoja respondió ' + r.status);
+        return r.json();
+      })
+      .then(function (resp) {
+        if (resp.error) throw new Error(resp.error);
+        fusionar(resp);
+        datos.ultimoSync = corte;
+        ajustarFicha();
+        return guardar();
+      })
+      .then(function () { sincronizando = false; pintar(); })
+      .catch(function (err) {
+        sincronizando = false;
+        ultimoError = mensajeError(err);
+        pintarEstado();
+      });
+  }
+
+  /** Pone la llave de sesión al día, pero solo con contraseñas que la hoja ya confirmó. */
+  function ajustarFicha() {
+    var p = permisoDe(datos.sesion);
+    if (!p) return;
+    if (!p.hash) { datos.ficha = ''; return; }
+    if (p.actualizado <= datos.ultimoSync) datos.ficha = fichaDe(p.hash, datos.sesion);
+  }
+
+  /** Si la hoja no contesta en 25 segundos, se corta: más vale un aviso que quedarse colgado. */
+  function conTiempo(promesa) {
+    return Promise.race([
+      promesa,
+      new Promise(function (_, rechazar) {
+        setTimeout(function () { rechazar(new Error('sin-respuesta')); }, 25000);
+      })
+    ]);
+  }
+
+  function mensajeError(err) {
+    var m = String(err && err.message || err);
+    if (m.indexOf('sin-respuesta') > -1) {
+      return location.protocol === 'file:'
+        ? 'La hoja no respondió. Abriendo la app como archivo local esto es normal: publícala en internet.'
+        : 'La hoja no respondió a tiempo. Revisa la conexión y vuelve a sincronizar.';
+    }
+    if (/Failed to fetch|NetworkError|Load failed/i.test(m)) {
+      return location.protocol === 'file:'
+        ? 'No se pudo leer la respuesta de la hoja. Abre la app desde su dirección de internet, no como archivo.'
+        : 'No se pudo conectar con la hoja.';
+    }
+    return m;
+  }
+
+  /** Gana el registro con la marca de tiempo más reciente, incluidos los borrados. */
+  function fusionar(remoto) {
+    var porNombre = {};
+    datos.personas.forEach(function (p) { porNombre[sinTildes(p.nombre)] = p; });
+    (remoto.personas || []).forEach(function (p) {
+      var k = sinTildes(p.nombre);
+      if (!porNombre[k] || p.actualizado > porNombre[k].actualizado) porNombre[k] = p;
+    });
+    datos.personas = Object.keys(porNombre).map(function (k) { return porNombre[k]; });
+
+    var porId = {};
+    datos.movs.forEach(function (m) { porId[m.id] = m; });
+    (remoto.movs || []).forEach(function (m) {
+      if (!porId[m.id] || m.actualizado > porId[m.id].actualizado) porId[m.id] = m;
+    });
+    datos.movs = Object.keys(porId).map(function (k) { return porId[k]; });
+
+    var porCorreo = {};
+    datos.permisos.forEach(function (p) { porCorreo[normCorreo(p.correo)] = p; });
+    (remoto.permisos || []).forEach(function (p) {
+      var k = normCorreo(p.correo);
+      if (!porCorreo[k] || p.actualizado > porCorreo[k].actualizado) porCorreo[k] = p;
+    });
+    datos.permisos = Object.keys(porCorreo).map(function (k) { return porCorreo[k]; });
+    asegurarDueno();
+  }
+
+  /* ---------- pintar ---------- */
+  function pintar() {
+    pintarNeto();
+    pintarEstado();
+    pintarDeudas();
+    pintarPersonas();
+    pintarMovs();
+    if (listo) pintarPuerta();
+  }
+
+  function pintarNeto() {
+    var cifra = $('neto-cifra'), etq = $('neto-etiqueta');
+    if (!listo) { etq.textContent = 'Cargando…'; cifra.textContent = '—'; return; }
+    var lista = deudas();
+    var total = lista.reduce(function (t, d) { return t + d.monto; }, 0);
+    cifra.textContent = plata(total);
+    cifra.style.color = total ? '' : 'var(--ink-soft)';
+    if (!lista.length) {
+      etq.textContent = movsVivos().length ? 'Nadie le debe nada a nadie' : 'Todavía no hay movimientos';
+    } else {
+      etq.textContent = 'En ' + lista.length + ' deuda' + (lista.length === 1 ? '' : 's') + ' abierta' + (lista.length === 1 ? '' : 's');
+    }
+  }
+
+  function pintarEstado() {
+    var barra = $('estado'), txt = $('estado-texto'), bot = $('b-sync');
+    var n = pendientes();
+
+    if (!datos.url) {
+      barra.dataset.tono = 'neutro';
+      if (esDueno()) {
+        txt.textContent = 'Guardado en este dispositivo · hoja sin conectar';
+        bot.textContent = 'Conectar';
+        bot.disabled = false;
+        bot.onclick = formConfig;
+      } else {
+        txt.textContent = 'Guardado en este dispositivo · sin respaldo en la hoja';
+        bot.textContent = 'Reintentar';
+        bot.disabled = true;
+        bot.onclick = null;
+      }
+      return;
+    }
+
+    bot.textContent = 'Sincronizar';
+    bot.onclick = function () { sincronizar(false); };
+    bot.disabled = sincronizando;
+
+    if (sincronizando) { barra.dataset.tono = 'espera'; txt.textContent = 'Subiendo cambios…'; return; }
+    if (ultimoError) { barra.dataset.tono = 'error'; txt.textContent = ultimoError + (n ? ' ' + n + ' sin subir.' : ''); return; }
+    if (!navigator.onLine) {
+      barra.dataset.tono = 'espera';
+      txt.textContent = n ? 'Sin señal · ' + n + ' cambio' + (n === 1 ? '' : 's') + ' esperando' : 'Sin señal · todo al día';
+      return;
+    }
+    if (n) { barra.dataset.tono = 'espera'; txt.textContent = n + ' cambio' + (n === 1 ? '' : 's') + ' por subir'; return; }
+    barra.dataset.tono = 'ok';
+    txt.textContent = datos.ultimoSync ? 'Al día con la hoja · ' + hace(datos.ultimoSync) : 'Al día con la hoja';
+  }
+
+  function hace(t) {
+    var s = Math.round((Date.now() - t) / 1000);
+    if (s < 60) return 'hace un momento';
+    var m = Math.round(s / 60);
+    if (m < 60) return 'hace ' + m + ' min';
+    var h = Math.round(m / 60);
+    if (h < 24) return 'hace ' + h + ' h';
+    return 'hace ' + Math.round(h / 24) + ' días';
+  }
+
+  function pintarDeudas() {
+    var cont = $('deudas');
+
+    if (!veTodo() && !miPersona()) {
+      cont.innerHTML = '<div class="vacio">Tu correo todavía no está asociado a ninguna persona de la familia. ' +
+        'Pídele a quien administra que lo agregue en tu ficha para ver tus cuentas.</div>';
+      return;
+    }
+
+    var lista = deudas();
+    if (!lista.length) {
+      cont.innerHTML = '<div class="vacio">' + (movsVivos().length ? 'Todos están a paz y salvo.' : 'Aquí van a aparecer las deudas abiertas.') + '</div>';
+      return;
+    }
+    cont.innerHTML = lista.map(function (d) {
+      return '<button class="deuda" data-persona="' + esc(d.deudor) + '">' +
+               '<span class="quienes"><span class="deudor">' + esc(d.deudor) + '</span>' +
+               '<span class="rel">le debe a ' + esc(d.acreedor) + '</span></span>' +
+               '<span class="cuanto">' + plata(d.monto) + '</span>' +
+             '</button>';
+    }).join('');
+    enlazarFicha(cont, '.deuda');
+  }
+
+  function pintarPersonas() {
+    var cont = $('personas');
+    var lista = personasVisibles();
+    if (!lista.length) {
+      cont.innerHTML = '<div class="vacio">Agrega a la familia para empezar a registrar préstamos.</div>';
+      return;
+    }
+    cont.innerHTML = lista.map(function (p) {
+      var d = detalle(p.nombre);
+      var lado = d.neto > 0 ? 'favor' : (d.neto < 0 ? 'debe' : 'cero');
+      var cifras = '';
+
+      if (d.favor) cifras += linea('le deben', d.favor, 'favor');
+      if (d.debe) cifras += linea('debe', d.debe, 'debe');
+      if (!cifras) cifras = linea('', 0, 'cero');
+
+      var frase = (d.favor && d.debe)
+        ? 'en neto ' + (d.neto > 0 ? 'le deben ' : (d.neto < 0 ? 'debe ' : '')) + (d.neto ? plata(d.neto) : 'queda en cero')
+        : (d.favor || d.debe ? 'con ' + (d.leDeben.length + d.debeA.length) + ' persona' + ((d.leDeben.length + d.debeA.length) === 1 ? '' : 's') : 'a paz y salvo');
+
+      return '<button class="persona" data-lado="' + lado + '" data-persona="' + esc(p.nombre) + '">' +
+               '<span><span class="nombre">' + esc(p.nombre) + '</span><span class="frase">' + esc(frase) + '</span></span>' +
+               '<span class="cifras">' + cifras + '</span>' +
+             '</button>';
+    }).join('');
+    enlazarFicha(cont, '.persona');
+  }
+
+  function linea(etiqueta, monto, lado) {
+    return '<span class="linea-cifra">' +
+           (etiqueta ? '<span class="et">' + etiqueta + '</span>' : '') +
+           '<span class="saldo" data-lado="' + lado + '">' + plata(monto) + '</span></span>';
+  }
+
+  function enlazarFicha(cont, sel) {
+    Array.prototype.forEach.call(cont.querySelectorAll(sel), function (b) {
+      b.onclick = function () { abrirFicha(b.dataset.persona); };
+    });
+  }
+
+  function coincide(m) {
+    if (filtro && m.de !== filtro && m.a !== filtro) return false;
+    if (!busqueda) return true;
+    var aguja = sinTildes(busqueda);
+    var heno = sinTildes([m.de, m.a, m.nota, TIPOS[m.tipo].texto, m.fecha, fechaCorta(m.fecha),
+      String(m.monto), plata(m.monto)].join(' '));
+    return heno.indexOf(aguja) > -1;
+  }
+
+  function pintarMovs() {
+    pintarChips();
+    pintarResumen();
+
+    var cont = $('movs');
+    var lista = movsVivos().filter(coincide).sort(function (a, b) {
+      return a.fecha === b.fecha ? b.id - a.id : (a.fecha < b.fecha ? 1 : -1);
+    });
+
+    var total = movsVivos().length;
+    $('b-sel').hidden = !total || !puedeBorrarMovs();
+    if (!puedeBorrarMovs() && modoSel) { modoSel = false; elegidos = {}; }
+    $('b-borrar-todo').hidden = !(puedeBorrarMovs() && puedeBorrarPers());
+    $('b-permisos').hidden = !esAdmin();
+    $('b-config').hidden = !esDueno();
+    var miP = permisoDe(datos.sesion);
+    $('b-clave').hidden = !datos.sesion || !miP;
+    $('b-salir').hidden = !datos.sesion;
+    $('quien-soy').innerHTML = datos.sesion
+      ? 'Entraste como <b>' + esc(datos.sesion) + '</b>' + esc(comoEntro()) +
+        (miP && !tieneClave(miP) ? ' · <b>sin contraseña</b>' : '')
+      : '';
+    $('titulo-movs').textContent = (filtro || busqueda)
+      ? lista.length + ' de ' + total + ' movimientos'
+      : 'Movimientos';
+
+    if (!lista.length) {
+      pintarBarraSel([]);
+      cont.innerHTML = '<div class="vacio">' +
+        (total ? 'Nada coincide con lo que buscas.' : 'Registra el primer préstamo o pago.') + '</div>';
+      return;
+    }
+
+    pintarBarraSel(lista);
+
+    cont.innerHTML = '<div class="movs">' + lista.map(function (m) {
+      var sinSubir = datos.url && m.actualizado > datos.ultimoSync;
+      var ultima = modoSel
+        ? '<span class="marca"><input type="checkbox" data-id="' + m.id + '"' + (elegidos[m.id] ? ' checked' : '') +
+          ' aria-label="Seleccionar movimiento"></span>'
+        : (puedeBorrarMovs()
+            ? '<button class="borrar" data-id="' + m.id + '" aria-label="Borrar movimiento">×</button>'
+            : '<span></span>');
+      return '<div class="mov' + (modoSel && elegidos[m.id] ? ' elegido' : '') + '" data-id="' + m.id + '">' +
+               '<span class="fecha">' + fechaCorta(m.fecha) + '</span>' +
+               '<span><span class="quien">' + resaltar(m.de) + '</span>' +
+                 '<span class="flecha">→</span><span class="quien">' + resaltar(m.a) + '</span>' +
+                 '<span class="que">' + TIPOS[m.tipo].corto + detalleMov(m) + (m.nota ? ' · ' + resaltar(m.nota) : '') +
+                 (sinSubir ? ' <span class="pend">SIN SUBIR</span>' : '') + '</span></span>' +
+               '<span class="monto" data-tipo="' + m.tipo + '">' + plata(m.monto) + '</span>' +
+               ultima +
+             '</div>';
+    }).join('') + '</div>';
+
+    if (modoSel) {
+      Array.prototype.forEach.call(cont.querySelectorAll('.mov'), function (fila) {
+        fila.onclick = function () {
+          var id = fila.dataset.id;
+          if (elegidos[id]) delete elegidos[id]; else elegidos[id] = true;
+          pintarMovs();
+        };
+      });
+      return;
+    }
+
+    Array.prototype.forEach.call(cont.querySelectorAll('.borrar'), function (b) {
+      b.onclick = function () {
+        if (!confirm('¿Borrar este movimiento? Se borra también de la hoja.')) return;
+        registrar(function () {
+          datos.movs.forEach(function (m) {
+            if (m.id === +b.dataset.id) { m.borrado = true; m.actualizado = Date.now(); }
+          });
+        });
+      };
+    });
+  }
+
+  function pintarBarraSel(visibles) {
+    var c = $('barra-sel');
+    if (!modoSel) { c.innerHTML = ''; return; }
+
+    var n = Object.keys(elegidos).length;
+    var todosVisibles = visibles.length > 0 && visibles.every(function (m) { return elegidos[m.id]; });
+    var ocultos = n - visibles.filter(function (m) { return elegidos[m.id]; }).length;
+
+    c.innerHTML = '<div class="barra-sel">' +
+      '<span>' + (n
+        ? n + ' seleccionado' + (n === 1 ? '' : 's') + (ocultos ? ' (' + ocultos + ' fuera de la lista)' : '')
+        : 'Toca los movimientos que quieres borrar') + '</span>' +
+      '<span class="grupo">' +
+        '<button class="btn mini" id="s-todos"' + (visibles.length ? '' : ' disabled') + '>' +
+          (todosVisibles ? 'Quitar todos' : 'Todos los visibles') + '</button>' +
+        '<button class="btn mini rojo" id="s-borrar"' + (n ? '' : ' disabled') + '>Borrar' + (n ? ' ' + n : '') + '</button>' +
+        '<button class="btn mini" id="s-salir">Cancelar</button>' +
+      '</span></div>';
+
+    $('s-todos').onclick = function () {
+      visibles.forEach(function (m) {
+        if (todosVisibles) delete elegidos[m.id]; else elegidos[m.id] = true;
+      });
+      pintarMovs();
+    };
+
+    $('s-salir').onclick = salirDeSeleccion;
+
+    $('s-borrar').onclick = function () {
+      var ids = Object.keys(elegidos);
+      if (!ids.length) return;
+      if (!confirm('¿Borrar ' + ids.length + ' movimiento' + (ids.length === 1 ? '' : 's') + '? Se borran también de la hoja.')) return;
+      registrar(function () {
+        var t = Date.now();
+        datos.movs.forEach(function (m) {
+          if (elegidos[m.id]) { m.borrado = true; m.actualizado = t; }
+        });
+        elegidos = {};
+        modoSel = false;
+        $('b-sel').textContent = 'Seleccionar';
+      });
+    };
+  }
+
+  function salirDeSeleccion() {
+    modoSel = false;
+    elegidos = {};
+    $('b-sel').textContent = 'Seleccionar';
+    pintarMovs();
+  }
+
+  function pintarChips() {
+    var c = $('chips');
+    var partes = [];
+    if (filtro) partes.push('<button class="chip" data-quitar="filtro">Solo <b>' + esc(filtro) + '</b> ×</button>');
+    if (busqueda) partes.push('<button class="chip" data-quitar="busqueda">Buscando <b>' + esc(busqueda) + '</b> ×</button>');
+    c.innerHTML = partes.join('');
+    Array.prototype.forEach.call(c.querySelectorAll('.chip'), function (b) {
+      b.onclick = function () {
+        if (b.dataset.quitar === 'filtro') filtro = null;
+        else { busqueda = ''; $('buscar').value = ''; $('b-limpiar').hidden = true; }
+        pintar();
+      };
+    });
+  }
+
+  function pintarResumen() {
+    var cont = $('resumen');
+    if (!filtro) { cont.innerHTML = ''; return; }
+
+    var otras = personasVisibles().map(function (p) { return p.nombre; })
+      .concat(movsVivos().map(function (m) { return m.de; }), movsVivos().map(function (m) { return m.a; }))
+      .filter(function (n, i, arr) { return n !== filtro && arr.indexOf(n) === i; });
+
+    var lineas = otras.map(function (o) {
+      var v = deudaEntre(filtro, o);
+      if (Math.round(v) === 0) return '';
+      var texto = v > 0 ? esc(o) + ' le debe a ' + esc(filtro) : esc(filtro) + ' le debe a ' + esc(o);
+      return '<div class="linea"><span>' + texto + '</span>' +
+             '<span class="cifrita" data-lado="' + (v > 0 ? 'favor' : 'debe') + '">' + plata(v) + '</span></div>';
+    }).filter(Boolean);
+
+    var s = saldoPersona(filtro);
+    var final = '<div class="linea"><span><b>' + esc(filtro) + '</b> en total</span>' +
+      '<span class="cifrita" data-lado="' + (s > 0 ? 'favor' : (s < 0 ? 'debe' : '')) + '">' +
+      (s > 0 ? 'le deben ' : (s < 0 ? 'debe ' : 'a paz y salvo ')) + (s ? plata(s) : '') + '</span></div>';
+
+    cont.innerHTML = '<div class="resumen">' + (lineas.join('') || '<div class="linea"><span>Sin deudas abiertas</span></div>') + final + '</div>';
+  }
+
+  /* ---------- ficha de la persona ---------- */
+  var fichaAbierta = null;
+
+  function abrirFicha(nombre) {
+    fichaAbierta = nombre;
+    var d = detalle(nombre);
+
+    var resumen = (d.favor && d.debe)
+      ? 'Le deben y debe al mismo tiempo'
+      : (d.favor ? 'Solo tiene plata a favor' : (d.debe ? 'Solo tiene deudas' : 'A paz y salvo'));
+
+    var totales = '<div class="totales">' +
+      '<div class="tot" data-lado="' + (d.favor ? 'favor' : '') + '"><span class="et">Le deben</span><span class="n">' + plata(d.favor) + '</span></div>' +
+      '<div class="tot" data-lado="' + (d.debe ? 'debe' : '') + '"><span class="et">Debe</span><span class="n">' + plata(d.debe) + '</span></div>' +
+      '</div>' +
+      '<div class="tot" data-lado="' + (d.neto > 0 ? 'favor' : (d.neto < 0 ? 'debe' : '')) + '" style="margin-top:8px">' +
+      '<span class="et">' + (d.neto > 0 ? 'En neto le deben' : (d.neto < 0 ? 'En neto debe' : 'En neto')) + '</span>' +
+      '<span class="n">' + (d.neto ? plata(d.neto) : '$0') + '</span></div>';
+
+    var bloqueFavor = d.leDeben.length
+      ? '<h4>Le deben a ' + esc(nombre) + '</h4><div class="rel-lista">' + d.leDeben.map(function (r) {
+          return '<button class="rel" data-persona="' + esc(r.quien) + '" data-lado="favor">' +
+                 '<span><span class="quien2">' + esc(r.quien) + '</span>' +
+                 '<span class="rel-txt">le debe a ' + esc(nombre) + '</span></span>' +
+                 '<span class="cifrita">' + plata(r.monto) + '</span></button>';
+        }).join('') + '</div>'
+      : '';
+
+    var bloqueDebe = d.debeA.length
+      ? '<h4>' + esc(nombre) + ' le debe a</h4><div class="rel-lista">' + d.debeA.map(function (r) {
+          return '<button class="rel" data-persona="' + esc(r.quien) + '" data-lado="debe">' +
+                 '<span><span class="quien2">' + esc(r.quien) + '</span>' +
+                 '<span class="rel-txt">' + esc(nombre) + ' le debe</span></span>' +
+                 '<span class="cifrita">' + plata(r.monto) + '</span></button>';
+        }).join('') + '</div>'
+      : '';
+
+    var sinDeudas = (!d.leDeben.length && !d.debeA.length)
+      ? '<h4>Deudas</h4><div class="vacio">No tiene deudas abiertas con nadie.</div>' : '';
+
+    var prestamos = prestamosDe(nombre);
+    var bloquePrestamos = prestamos.length
+      ? '<h4>Préstamos (' + prestamos.filter(function (l) { return !estadoPrestamo(l).saldado; }).length + ' abiertos)</h4>' +
+        '<div class="rel-lista">' + prestamos.map(function (l) {
+          var presto = l.de === nombre;
+          var e = estadoPrestamo(l);
+          var pct = Math.max(0, Math.min(100, Math.round(e.abonado / (l.monto + e.causado) * 100)));
+          var lista = abonosDe(l.id);
+
+          var renglones = [];
+          if (e.conInteres) {
+            renglones.push('CAPITAL ' + (cero(e.capital) ? 'PAGADO' : plata(e.capital)));
+            renglones.push('INTERÉS ' + (cero(e.interes) ? 'AL DÍA' : plata(e.interes)));
+            renglones.push('TOTAL ' + plata(e.total));
+          } else if (e.saldado) {
+            renglones.push('SALDADO');
+          } else {
+            renglones.push('ABONADO ' + plata(e.abonado) + ' · QUEDA ' + plata(e.total));
+          }
+          if (e.saldado && e.conInteres) renglones = ['SALDADO'];
+
+          return '<div class="prest" data-estado="' + (e.saldado ? 'saldado' : 'abierto') + '">' +
+            '<div class="fila1"><span><b>' + (presto ? 'Le prestó a ' + esc(l.a) : 'Le prestó ' + esc(l.de)) + '</b>' +
+              '<span class="rel-txt">' + fechaCorta(l.fecha) +
+              (e.conInteres ? ' · <b>' + esc(tasaTexto(l)) + '</b>' : '') +
+              (l.nota ? ' · ' + esc(l.nota) : '') + '</span></span>' +
+              '<span class="cifrita">' + plata(l.monto) + '</span></div>' +
+            '<div class="barra"><i style="width:' + pct + '%"></i></div>' +
+            '<div class="det">' + renglones.join(' · ') + '</div>' +
+            (e.detenido && !e.saldado
+              ? '<div class="det" style="color:var(--haber)">CAPITAL PAGADO · LOS INTERESES YA NO CORREN</div>' : '') +
+            (lista.length
+              ? '<details class="abonos"><summary>' + lista.length + ' abono' + (lista.length === 1 ? '' : 's') + '</summary>' +
+                lista.map(function (p) {
+                  return '<div class="abono"><span>' + fechaCorta(p.fecha) + (p.nota ? ' · ' + esc(p.nota) : '') + '</span>' +
+                         '<span class="cifrita">' + plata(p.monto) + '</span></div>';
+                }).join('') + '</details>'
+              : '') +
+            '</div>';
+        }).join('') + '</div>'
+      : '';
+
+    var suyos = movsVivos()
+      .filter(function (m) { return m.de === nombre || m.a === nombre; })
+      .sort(function (a, b) { return a.fecha === b.fecha ? b.id - a.id : (a.fecha < b.fecha ? 1 : -1); });
+
+    var historial = suyos.length
+      ? '<div class="movs compacta">' + suyos.map(function (m) {
+          var entrega = m.de === nombre;
+          return '<div class="mov">' +
+                   '<span class="fecha">' + fechaCorta(m.fecha) + '</span>' +
+                   '<span><span class="quien">' + (entrega ? 'Le entregó a ' + esc(m.a) : 'Recibió de ' + esc(m.de)) + '</span>' +
+                   '<span class="que">' + TIPOS[m.tipo].corto + detalleMov(m) + (m.nota ? ' · ' + esc(m.nota) : '') + '</span></span>' +
+                   '<span class="monto" data-tipo="' + m.tipo + '">' + plata(m.monto) + '</span>' +
+                 '</div>';
+        }).join('') + '</div>'
+      : '<div class="vacio">Todavía no tiene movimientos.</div>';
+
+    $('ficha').innerHTML =
+      '<div class="ficha-fondo" role="dialog" aria-modal="true" aria-label="Ficha de ' + esc(nombre) + '">' +
+      '<div class="ficha">' +
+        '<div class="ficha-cab"><div><h3>' + esc(nombre) + '</h3>' +
+          '<span class="resu">' + resumen + '</span></div>' +
+          '<button class="cerrar" id="fi-cerrar" aria-label="Cerrar">×</button></div>' +
+        '<div class="ficha-cuerpo">' +
+          totales + bloqueFavor + bloqueDebe + sinDeudas + bloquePrestamos +
+          '<h4>Todos sus movimientos (' + suyos.length + ')</h4>' + historial +
+          '<div class="acciones">' +
+            '<button class="btn" id="fi-nuevo">Registrar movimiento</button>' +
+            (suyos.length ? '<button class="btn ghost" id="fi-filtrar">Ver en la lista</button>' : '') +
+          '</div>' +
+        '</div>' +
+      '</div></div>';
+
+    $('fi-cerrar').onclick = cerrarFicha;
+    $('ficha').querySelector('.ficha-fondo').onclick = function (ev) {
+      if (ev.target === this) cerrarFicha();
+    };
+    Array.prototype.forEach.call($('ficha').querySelectorAll('.rel'), function (b) {
+      b.onclick = function () { abrirFicha(b.dataset.persona); };
+    });
+    $('fi-nuevo').onclick = function () {
+      cerrarFicha();
+      formMov(nombre);
+      $('panel').scrollIntoView({ behavior: 'smooth', block: 'center' });
+    };
+    if ($('fi-filtrar')) $('fi-filtrar').onclick = function () {
+      filtro = nombre;
+      cerrarFicha();
+      pintar();
+      $('movs').scrollIntoView({ behavior: 'smooth', block: 'start' });
+    };
+
+    document.body.style.overflow = 'hidden';
+  }
+
+  function cerrarFicha() {
+    fichaAbierta = null;
+    $('ficha').innerHTML = '';
+    document.body.style.overflow = '';
+  }
+
+  function comoEntro() {
+    var partes = [];
+    if (esAdmin()) partes.push('administra');
+    if (puedeEditarPers()) partes.push('edita personas');
+    if (puedeBorrarMovs()) partes.push('borra movimientos');
+    if (puedeBorrarPers()) partes.push('borra personas');
+    var yo = miPersona();
+    var alcance = veTodo() ? 've todas las cuentas' : (yo ? 've solo lo de ' + yo : 'sin cuentas asociadas');
+    partes.push(alcance);
+    return ' · ' + partes.join(' · ');
+  }
+
+  function formPermisos() {
+    panel.innerHTML = '';
+
+    if (!esAdmin()) {
+      panel2.innerHTML = '<div class="hoja"><h3>Permisos</h3>' +
+        '<p class="pista" style="margin:0">Entraste como <b>' + esc(datos.sesion) + '</b>. ' +
+        'Solo quien administra puede ver y cambiar los permisos.</p>' +
+        '<div class="acciones"><button class="btn ghost" id="f-no">Cerrar</button></div></div>';
+      $('f-no').onclick = cerrar;
+      return;
+    }
+
+    var campos = LLAVES.map(function (llave) {
+      return area(llave) +
+        '<div class="campo" style="margin-top:10px"><label for="f-add-' + llave + '">Agregar un correo aquí</label>' +
+        '<input type="email" id="f-add-' + llave + '" autocomplete="off" spellcheck="false" ' +
+        'placeholder="alguien@gmail.com" list="correos-familia"></div>' +
+        '<div class="acciones" style="margin-top:0"><button class="btn mini" data-agregar="' + llave + '">Agregar</button></div>';
+    }).join('');
+
+    panel2.innerHTML =
+      '<div class="hoja"><h3>Permisos</h3>' +
+      '<p class="error" id="err" hidden></p>' +
+      '<p class="pista" style="margin:0 0 6px">Cuatro áreas independientes. Cualquiera de las tres últimas incluye el permiso de entrar, ' +
+      'porque sin entrar no sirven de nada.</p>' +
+      campos +
+      '<datalist id="correos-familia">' + personasVivas().filter(function (p) { return p.correo; })
+        .map(function (p) { return '<option value="' + esc(p.correo) + '">' + esc(p.nombre) + '</option>'; }).join('') +
+      '</datalist>' +
+      '<div class="acciones"><button class="btn ghost" id="f-no">Cerrar</button></div></div>';
+
+    $('f-no').onclick = cerrar;
+
+    Array.prototype.forEach.call(panel2.querySelectorAll('[data-agregar]'), function (b) {
+      b.onclick = function () {
+        var llave = b.dataset.agregar;
+        agregarPermiso($('f-add-' + llave).value, llave);
+      };
+    });
+
+    Array.prototype.forEach.call(panel2.querySelectorAll('.quitar'), function (b) {
+      b.onclick = function () { quitarPermiso(b.dataset.correo, b.dataset.llave); };
+    });
+
+    Array.prototype.forEach.call(panel2.querySelectorAll('[data-clave]'), function (b) {
+      b.onclick = function () { formClave(b.dataset.clave); };
+    });
+  }
+
+  function pedirCierreSesion() {
+    if (confirm('¿Cerrar sesión en este dispositivo? Los datos se quedan guardados.')) cerrarSesion();
+  }
+
+  function area(llave) {
+    var lista = permisosVivos().filter(function (p) { return p[llave]; });
+    var filas = lista.length
+      ? lista.map(function (p) {
+          var etiquetas = LLAVES.filter(function (k) { return p[k]; }).map(function (k) { return CORTO_LLAVE[k]; });
+          return '<div class="perm">' +
+            '<span><span class="correo">' + esc(p.correo) + '</span>' +
+            '<span class="llave">' + etiquetas.join(' · ') + '</span></span>' +
+            '<span class="acc">' +
+              (llave === 'entrar'
+                ? '<button class="btn ghost mini" data-clave="' + esc(p.correo) + '">' +
+                  (tieneClave(p) ? 'Clave ✓' : 'Sin clave') + '</button>'
+                : '') +
+              (p.protegido
+                ? '<span class="fijo">FIJO</span>'
+                : '<button class="quitar" data-correo="' + esc(p.correo) + '" data-llave="' + llave +
+                  '" aria-label="Quitar de esta área">×</button>') +
+            '</span></div>';
+        }).join('')
+      : '<div class="perm-vacio">Nadie por ahora.</div>';
+
+    return '<h4 style="font-family:var(--mono);font-size:10px;letter-spacing:.16em;text-transform:uppercase;' +
+           'color:var(--ink-soft);margin:20px 0 4px">' + NOMBRE_LLAVE[llave] + '</h4>' +
+           '<div class="perm-lista">' + filas + '</div>';
+  }
+
+  function agregarPermiso(valor, llave) {
+    var c = normCorreo(valor);
+    var err = $('err');
+    if (!c || c.indexOf('@') < 1 || c.indexOf('.') < 0) {
+      err.textContent = 'Escribe un correo válido.'; err.hidden = false; return;
+    }
+    registrar(function () {
+      var p = datos.permisos.filter(function (x) { return normCorreo(x.correo) === c; })[0];
+      if (!p) {
+        p = { correo: c, sal: '', hash: '', protegido: false, borrado: false, actualizado: 0 };
+        LLAVES.forEach(function (k) { p[k] = false; });
+        datos.permisos.push(p);
+      }
+      p.borrado = false;
+      p.entrar = true;
+      p[llave] = true;
+      p.actualizado = Date.now();
+    }).then(formPermisos);
+  }
+
+  function quitarPermiso(correo, llave) {
+    var c = normCorreo(correo);
+    if (c === DUENO) return;
+
+    var propio = c === normCorreo(datos.sesion);
+    var texto = llave === 'entrar'
+      ? '¿Quitarle a ' + c + ' el acceso a la app? Pierde también los otros permisos.'
+      : '¿Quitarle a ' + c + ' este permiso? Seguirá entrando a la app.';
+    if (propio) texto = 'Te vas a quitar un permiso a ti mismo' + (llave === 'entrar' ? ' y saldrás de la app' : '') + '. ' + texto;
+    if (!confirm(texto)) return;
+
+    registrar(function () {
+      datos.permisos.forEach(function (p) {
+        if (normCorreo(p.correo) !== c || p.protegido) return;
+        if (llave === 'entrar') {
+          LLAVES.forEach(function (k) { p[k] = false; });
+          p.borrado = true;
+        } else {
+          p[llave] = false;
+        }
+        p.actualizado = Date.now();
+      });
+    }).then(function () {
+      if (!sesionValida()) { pintarPuerta(); cerrar(); return; }
+      if (!esAdmin()) { cerrar(); return; }
+      formPermisos();
+    });
+  }
+
+  /* ---------- crear y cambiar contraseñas ---------- */
+
+  function formClave(correo) {
+    var c = normCorreo(correo || datos.sesion);
+    var p = permisoDe(c);
+    var propia = c === normCorreo(datos.sesion);
+    var yaTiene = tieneClave(p);
+
+    if (!p) return;
+    if (!propia && !esAdmin()) return;
+
+    panel.innerHTML = '';
+    panel2.innerHTML =
+      '<div class="hoja"><h3>' + (yaTiene ? 'Cambiar contraseña' : 'Crear contraseña') + '</h3>' +
+      '<p class="pista" style="margin:0 0 12px">' +
+        (propia ? 'La tuya, para ' : 'Para ') + '<b>' + esc(c) + '</b>. ' +
+        'Se guarda cifrada: ni en la hoja ni en el teléfono queda escrita.</p>' +
+      '<p class="error" id="err" hidden></p>' +
+      (yaTiene && propia
+        ? '<div class="campo"><label for="cl-vieja">Contraseña actual</label>' +
+          '<input type="password" id="cl-vieja" autocomplete="current-password"></div>'
+        : '') +
+      '<div class="campo"><label for="cl-nueva">Contraseña nueva</label>' +
+      '<input type="password" id="cl-nueva" autocomplete="new-password" placeholder="mínimo 6 caracteres"></div>' +
+      '<div class="campo"><label for="cl-otra">Repítela</label>' +
+      '<input type="password" id="cl-otra" autocomplete="new-password"></div>' +
+      '<div class="acciones"><button class="btn" id="cl-ok">Guardar</button>' +
+      '<button class="btn ghost" id="cl-no">Cancelar</button>' +
+      (yaTiene && esAdmin() ? '<button class="btn ghost peligro" id="cl-quitar">Quitar contraseña</button>' : '') +
+      '</div></div>';
+
+    ponerOjos(panel2);
+    $('cl-nueva').focus();
+    $('cl-no').onclick = cerrar;
+
+    if ($('cl-quitar')) $('cl-quitar').onclick = function () {
+      if (!confirm('¿Quitarle la contraseña a ' + c + '? Volverá a entrar solo con el correo.')) return;
+      registrar(function () {
+        datos.permisos.forEach(function (x) {
+          if (normCorreo(x.correo) !== c) return;
+          x.sal = ''; x.hash = ''; x.actualizado = Date.now();
+        });
+        if (propia) datos.ficha = '';
+      }).then(cerrar);
+    };
+
+    $('cl-ok').onclick = function () {
+      var err = $('err');
+      var nueva = $('cl-nueva').value;
+      var otra = $('cl-otra').value;
+
+      if ($('cl-vieja') && !claveCorrecta(p, $('cl-vieja').value)) {
+        err.textContent = 'La contraseña actual no coincide.'; err.hidden = false; return;
+      }
+      if (nueva.length < 6) {
+        err.textContent = 'Usa al menos 6 caracteres.'; err.hidden = false; return;
+      }
+      if (nueva !== otra) {
+        err.textContent = 'Las dos contraseñas no son iguales.'; err.hidden = false; return;
+      }
+
+      var sal = salAleatoria();
+      var hash = hashClave(nueva, sal);
+
+      registrar(function () {
+        datos.permisos.forEach(function (x) {
+          if (normCorreo(x.correo) !== c) return;
+          x.sal = sal; x.hash = hash; x.actualizado = Date.now();
+        });
+        // Ojo: datos.ficha NO se toca aquí. La llave vieja es la que la hoja
+        // conoce, y es la que debe autorizar esta misma subida. Se renueva
+        // sola cuando la sincronización confirme el cambio.
+        if (propia && !datos.url) datos.ficha = fichaDe(hash, c);
+      }).then(function () {
+        cerrar();
+        alert(propia
+          ? 'Listo. Con esta contraseña entras en cualquier dispositivo.' +
+            (datos.url && !navigator.onLine ? ' Se subirá a la hoja cuando haya señal.' : '')
+          : 'Listo. Avísale a ' + c + ' su contraseña nueva; puede cambiarla cuando entre.');
+      });
+    };
+  }
+
+  /* ---------- formularios ---------- */
+  function cerrar() { panel.innerHTML = ''; panel2.innerHTML = ''; }
+
+  function formPersonas() {
+    panel2.innerHTML = '';
+    var gente = personasVivas();
+
+    Object.keys(elegidas).forEach(function (n) {
+      if (!gente.some(function (p) { return p.nombre === n; })) delete elegidas[n];
+    });
+
+    var filas = gente.map(function (p) {
+      var n = esc(p.nombre);
+      var marcada = !!elegidas[p.nombre];
+      var etiqueta = n + (p.correo
+        ? '<span class="llave" style="text-transform:none;letter-spacing:0;font-size:11px">' + esc(p.correo) + '</span>'
+        : '<span class="llave" style="color:var(--debe)">FALTA CORREO · NO VE SUS CUENTAS</span>');
+      var izquierda = modoSelPers
+        ? '<label><input type="checkbox" data-nombre="' + n + '"' + (marcada ? ' checked' : '') + '><span>' + etiqueta + '</span></label>'
+        : '<span style="padding-left:6px">' + etiqueta + '</span>';
+      var derecha = '';
+      if (!modoSelPers) {
+        if (puedeEditarPers()) {
+          derecha += '<button class="quitar" data-editar="' + n + '" aria-label="Editar a ' + n + '">✎</button>';
+        }
+        if (puedeBorrarPers()) {
+          derecha += '<button class="quitar" data-nombre="' + n + '" aria-label="Quitar a ' + n + '">×</button>';
+        }
+      }
+      return '<div class="fila' + (marcada ? ' elegida' : '') + '">' + izquierda + derecha + '</div>';
+    }).join('');
+
+    var cuantas = Object.keys(elegidas).length;
+    var barra = '';
+    if (gente.length > 1 && puedeBorrarPers()) {
+      barra = modoSelPers
+        ? '<div class="barra-sel clara">' +
+            '<span>' + (cuantas ? cuantas + ' seleccionada' + (cuantas === 1 ? '' : 's') : 'Marca a quién quitar') + '</span>' +
+            '<span class="grupo">' +
+              '<button class="btn mini" id="p-todas">' + (cuantas === gente.length ? 'Quitar marcas' : 'Todas') + '</button>' +
+              '<button class="btn mini rojo" id="p-quitar"' + (cuantas ? '' : ' disabled') + '>Quitar' + (cuantas ? ' ' + cuantas : '') + '</button>' +
+              '<button class="btn mini" id="p-salir">Cancelar</button>' +
+            '</span></div>'
+        : '<div class="acciones" style="margin-top:12px"><button class="btn ghost mini" id="p-sel">Seleccionar varias</button></div>';
+    }
+
+    var sinCorreo = gente.filter(function (p) { return !p.correo; });
+
+    panel.innerHTML =
+      '<div class="hoja"><h3>Personas</h3>' +
+      '<p class="error" id="err" hidden></p>' +
+      (sinCorreo.length
+        ? '<p class="pista" style="color:var(--debe);margin:0 0 12px">' +
+          (sinCorreo.length === 1 ? sinCorreo[0].nombre + ' no tiene correo' : sinCorreo.length + ' personas no tienen correo') +
+          '. Mientras no lo tengan, no pueden ver sus propias cuentas al entrar. ' +
+          (puedeEditarPers() ? 'Tócalas con el lápiz para agregárselo.' : '') + '</p>'
+        : '') +
+      (puedeEditarPers()
+        ? '<div class="campo"><label for="f-nombre">Agregar a la familia</label>' +
+          '<input type="text" id="f-nombre" autocomplete="off" placeholder="Papá, Andrés, Tía Marta…"></div>' +
+          '<div class="campo"><label for="f-correo">Su correo</label>' +
+          '<input type="email" id="f-correo" autocomplete="off" spellcheck="false" placeholder="andres@gmail.com">' +
+          '<p class="pista">Con este correo la persona ve solo sus propias cuentas. Sin él no puede ver nada.</p></div>' +
+          '<div class="acciones" style="margin-top:0"><button class="btn" id="f-ok">Agregar</button>' +
+          '<button class="btn ghost" id="f-no">Cerrar</button></div>'
+        : '<p class="pista" style="margin:0 0 4px">Tu correo no tiene permiso para crear ni editar personas.</p>' +
+          '<div class="acciones" style="margin-top:0"><button class="btn ghost" id="f-no">Cerrar</button></div>') +
+      (filas ? '<div class="lista-pers">' + filas + '</div>' : '') +
+      barra +
+      '</div>';
+
+    if (!modoSelPers && $('f-nombre')) $('f-nombre').focus();
+    $('f-no').onclick = function () { modoSelPers = false; elegidas = {}; cerrar(); };
+
+    if ($('f-ok')) $('f-ok').onclick = function () {
+      var n = $('f-nombre').value.trim();
+      var correo = normCorreo($('f-correo').value);
+      var err = $('err');
+      if (!n) { err.textContent = 'Escribe un nombre.'; err.hidden = false; return; }
+      if (!correo) { err.textContent = 'Falta el correo. Sin él, esa persona no puede ver sus cuentas.'; err.hidden = false; return; }
+      if (correo.indexOf('@') < 1 || correo.indexOf('.') < 0) {
+        err.textContent = 'Ese correo no parece válido.'; err.hidden = false; return;
+      }
+      var existe = datos.personas.filter(function (p) { return sinTildes(p.nombre) === sinTildes(n); })[0];
+      if (existe && !existe.borrado) { err.textContent = n + ' ya está en la lista.'; err.hidden = false; return; }
+      var duena = datos.personas.filter(function (p) {
+        return !p.borrado && p !== existe && normCorreo(p.correo) === correo;
+      })[0];
+      if (duena) {
+        err.textContent = 'Ese correo ya es el de ' + duena.nombre + '. Cada correo debe ser de una sola persona.';
+        err.hidden = false;
+        return;
+      }
+      registrar(function () {
+        if (existe) { existe.borrado = false; existe.nombre = n; existe.correo = correo; existe.actualizado = Date.now(); }
+        else datos.personas.push({ nombre: n, correo: correo, borrado: false, actualizado: Date.now() });
+      }).then(formPersonas);
+    };
+
+    Array.prototype.forEach.call(panel.querySelectorAll('.lista-pers input[type=checkbox]'), function (c) {
+      c.onchange = function () {
+        if (c.checked) elegidas[c.dataset.nombre] = true;
+        else delete elegidas[c.dataset.nombre];
+        formPersonas();
+      };
+    });
+
+    Array.prototype.forEach.call(panel.querySelectorAll('[data-nombre].quitar'), function (b) {
+      b.onclick = function () { quitarPersonas([b.dataset.nombre]); };
+    });
+
+    Array.prototype.forEach.call(panel.querySelectorAll('[data-editar]'), function (b) {
+      b.onclick = function () { formEditarPersona(b.dataset.editar); };
+    });
+
+    if ($('p-sel')) $('p-sel').onclick = function () { modoSelPers = true; formPersonas(); };
+    if ($('p-salir')) $('p-salir').onclick = function () { modoSelPers = false; elegidas = {}; formPersonas(); };
+    if ($('p-todas')) $('p-todas').onclick = function () {
+      if (cuantas === gente.length) elegidas = {};
+      else gente.forEach(function (p) { elegidas[p.nombre] = true; });
+      formPersonas();
+    };
+    if ($('p-quitar')) $('p-quitar').onclick = function () { quitarPersonas(Object.keys(elegidas)); };
+  }
+
+  /**
+   * Editar una persona. El nombre es la llave con la que los movimientos la
+   * señalan, así que al renombrar hay que arrastrar también sus movimientos:
+   * si no, la deuda quedaría a nombre de alguien que ya no existe.
+   */
+  function formEditarPersona(nombre) {
+    if (!puedeEditarPers()) return;
+    var p = datos.personas.filter(function (x) { return x.nombre === nombre && !x.borrado; })[0];
+    if (!p) return;
+
+    var suyos = movsTodos().filter(function (m) { return m.de === nombre || m.a === nombre; }).length;
+
+    panel2.innerHTML = '';
+    panel.innerHTML =
+      '<div class="hoja"><h3>Editar a ' + esc(nombre) + '</h3>' +
+      '<p class="error" id="err" hidden></p>' +
+      '<div class="campo"><label for="ed-nombre">Nombre</label>' +
+      '<input type="text" id="ed-nombre" autocomplete="off" value="' + esc(p.nombre) + '"></div>' +
+      '<div class="campo"><label for="ed-correo">Su correo</label>' +
+      '<input type="email" id="ed-correo" autocomplete="off" spellcheck="false" required ' +
+      'placeholder="andres@gmail.com" value="' + esc(p.correo || '') + '">' +
+      '<p class="pista">Con este correo la persona ve sus propias cuentas al entrar. ' +
+      'Darle acceso a la app es aparte, en Permisos.</p></div>' +
+      (suyos ? '<p class="pista" style="margin:0 0 12px">Si le cambias el nombre, se actualizan también sus ' +
+        suyos + ' movimiento' + (suyos === 1 ? '' : 's') + '.</p>' : '') +
+      '<div class="acciones"><button class="btn" id="ed-ok">Guardar</button>' +
+      '<button class="btn ghost" id="ed-no">Cancelar</button></div></div>';
+
+    $('ed-nombre').focus();
+    $('ed-no').onclick = function () { formPersonas(); };
+
+    $('ed-ok').onclick = function () {
+      var err = $('err');
+      var nuevo = $('ed-nombre').value.trim();
+      var correo = normCorreo($('ed-correo').value);
+
+      if (!nuevo) { err.textContent = 'El nombre no puede quedar vacío.'; err.hidden = false; return; }
+      if (!correo) { err.textContent = 'Falta el correo. Sin él, esa persona no puede ver sus cuentas.'; err.hidden = false; return; }
+      if (correo.indexOf('@') < 1 || correo.indexOf('.') < 0) {
+        err.textContent = 'Ese correo no parece válido.'; err.hidden = false; return;
+      }
+
+      var choca = datos.personas.filter(function (x) {
+        return !x.borrado && x.nombre !== nombre && sinTildes(x.nombre) === sinTildes(nuevo);
+      })[0];
+      if (choca) { err.textContent = 'Ya hay alguien llamado ' + nuevo + '.'; err.hidden = false; return; }
+
+      var repetido = datos.personas.filter(function (x) {
+        return !x.borrado && x.nombre !== nombre && normCorreo(x.correo) === correo;
+      })[0];
+      if (repetido) {
+        err.textContent = 'Ese correo ya es el de ' + repetido.nombre + '. Cada correo debe ser de una sola persona.';
+        err.hidden = false;
+        return;
+      }
+
+      var cambiaNombre = nuevo !== nombre;
+      if (cambiaNombre && suyos &&
+          !confirm('Se va a renombrar a ' + nombre + ' como ' + nuevo + ' en sus ' + suyos +
+                   ' movimiento' + (suyos === 1 ? '' : 's') + '. ¿Seguir?')) return;
+
+      registrar(function () {
+        var t = Date.now();
+        p.nombre = nuevo;
+        p.correo = correo;
+        p.actualizado = t;
+
+        if (cambiaNombre) {
+          datos.movs.forEach(function (m) {
+            if (m.de !== nombre && m.a !== nombre) return;
+            if (m.de === nombre) m.de = nuevo;
+            if (m.a === nombre) m.a = nuevo;
+            m.actualizado = t;
+          });
+          if (filtro === nombre) filtro = nuevo;
+          if (elegidas[nombre]) { delete elegidas[nombre]; elegidas[nuevo] = true; }
+        }
+      }).then(formPersonas);
+    };
+  }
+
+  /** Quita personas y, si tienen movimientos, ofrece borrarlos junto con ellas. */
+  function quitarPersonas(nombres) {
+    if (!nombres.length) return;
+    if (!puedeBorrarPers()) {
+      var e = $('err');
+      if (e) { e.textContent = 'Tu correo no tiene permiso para eliminar personas.'; e.hidden = false; }
+      return;
+    }
+
+    // Cuenta sobre todos los movimientos, no solo los visibles, para no dejar cuentas huérfanas.
+    var afectados = movsTodos().filter(function (m) {
+      return nombres.indexOf(m.de) > -1 || nombres.indexOf(m.a) > -1;
+    });
+
+    var quienes = nombres.length === 1 ? nombres[0] : nombres.length + ' personas';
+
+    if (afectados.length) {
+      var aviso = (nombres.length === 1 ? nombres[0] + ' tiene ' : 'Entre las seleccionadas hay ') +
+        afectados.length + ' movimiento' + (afectados.length === 1 ? '' : 's') +
+        ' registrado' + (afectados.length === 1 ? '' : 's') +
+        '. Al quitarlas se borran esos movimientos y las deudas que quedaran abiertas desaparecen.\n\n¿Seguir?';
+      if (!confirm(aviso)) return;
+    } else if (!confirm('¿Quitar a ' + quienes + '?')) {
+      return;
+    }
+
+    registrar(function () {
+      var t = Date.now();
+      datos.personas.forEach(function (p) {
+        if (nombres.indexOf(p.nombre) > -1) { p.borrado = true; p.actualizado = t; }
+      });
+      datos.movs.forEach(function (m) {
+        if (nombres.indexOf(m.de) > -1 || nombres.indexOf(m.a) > -1) { m.borrado = true; m.actualizado = t; }
+      });
+      if (nombres.indexOf(filtro) > -1) filtro = null;
+      elegidas = {};
+      modoSelPers = false;
+    }).then(formPersonas);
+  }
+
+  function formMov(preDe) {
+    panel2.innerHTML = '';
+    var gente = personasVivas();
+    if (gente.length < 2) {
+      formPersonas();
+      var e = $('err');
+      if (e) { e.textContent = 'Agrega al menos dos personas para registrar un préstamo.'; e.hidden = false; }
+      return;
+    }
+
+    var elegida = (typeof preDe === 'string' && preDe) ? preDe : (filtro || gente[0].nombre);
+    var ops = function (sel) {
+      return gente.map(function (p) {
+        return '<option value="' + esc(p.nombre) + '"' + (p.nombre === sel ? ' selected' : '') + '>' + esc(p.nombre) + '</option>';
+      }).join('');
+    };
+
+    var tipos = Object.keys(TIPOS).map(function (k, i) {
+      return '<label class="tipo"><input type="radio" name="tipo" value="' + k + '"' + (i === 0 ? ' checked' : '') + '>' +
+             '<span>' + TIPOS[k].texto + '</span></label>';
+    }).join('');
+
+    var yo = veTodo() ? null : miPersona();
+    var lado = '';
+
+    if (yo) {
+      // Quien solo ve lo suyo únicamente puede registrar movimientos en los que participa.
+      var otras = gente.filter(function (p) { return p.nombre !== yo; });
+      lado =
+        '<div class="campo"><label>Quién entrega la plata y quién la recibe</label>' +
+        '<div class="par">' +
+          '<select id="f-de" aria-label="Quién entrega">' +
+            '<option value="__yo">' + esc(yo) + ' (tú)</option>' +
+            '<option value="__otro">la otra persona</option>' +
+          '</select>' +
+          '<span class="flechita">→</span>' +
+          '<select id="f-a" aria-label="La otra persona">' +
+            otras.map(function (p) { return '<option value="' + esc(p.nombre) + '">' + esc(p.nombre) + '</option>'; }).join('') +
+          '</select>' +
+        '</div>' +
+        '<p class="pista" id="f-frase"></p></div>';
+    } else {
+      lado =
+        '<div class="campo"><label>Quién entrega la plata y quién la recibe</label>' +
+        '<div class="par">' +
+          '<select id="f-de" aria-label="Quién entrega">' + ops(elegida) + '</select>' +
+          '<span class="flechita">→</span>' +
+          '<select id="f-a" aria-label="Quién recibe">' + ops(gente[1].nombre) + '</select>' +
+        '</div></div>';
+    }
+
+    panel.innerHTML =
+      '<div class="hoja"><h3>Registrar movimiento</h3>' +
+      '<p class="error" id="err" hidden></p>' +
+      lado +
+      '<div class="campo"><label for="f-monto">Monto</label>' +
+      '<input type="tel" inputmode="numeric" id="f-monto" autocomplete="off" placeholder="200.000"></div>' +
+      '<div id="f-previo"></div>' +
+      '<div class="campo"><label>Cómo se llama</label><div class="tipos">' + tipos + '</div></div>' +
+      '<div id="f-interes"></div>' +
+      '<div id="f-prestamo"></div>' +
+      '<div class="campo"><label for="f-fecha">Fecha</label><input type="date" id="f-fecha" value="' + hoy() + '"></div>' +
+      '<div class="campo"><label for="f-nota">Nota (opcional)</label>' +
+      '<input type="text" id="f-nota" autocomplete="off" placeholder="Para el arriendo"></div>' +
+      '<div class="acciones"><button class="btn" id="f-ok">Guardar movimiento</button>' +
+      '<button class="btn ghost" id="f-no">Cancelar</button></div></div>';
+
+    var inMonto = $('f-monto'), selDe = $('f-de'), selA = $('f-a');
+    if (!yo && selDe.value === selA.value) selA.selectedIndex = selDe.selectedIndex === 0 ? 1 : 0;
+    inMonto.focus();
+
+    /** Con la vista restringida, los dos selects se traducen a un par de nombres reales. */
+    function ladosReales() {
+      if (!yo) return { de: selDe.value, a: selA.value };
+      return selDe.value === '__yo'
+        ? { de: yo, a: selA.value }
+        : { de: selA.value, a: yo };
+    }
+
+    function tipoElegido() {
+      var r = document.querySelector('input[name=tipo]:checked');
+      return r ? r.value : 'prestamo';
+    }
+
+    function pintarInteres() {
+      var caja = $('f-interes');
+      if (tipoElegido() !== 'prestamo') { caja.innerHTML = ''; return; }
+      if ($('f-periodo')) return;   // ya está puesto, no lo redibujo para no perder lo escrito
+
+      var ops = Object.keys(PERIODOS).map(function (k) {
+        return '<option value="' + k + '">' + PERIODOS[k].texto + '</option>';
+      }).join('');
+
+      caja.innerHTML =
+        '<div class="campo"><label for="f-periodo">Intereses</label>' +
+        '<select id="f-periodo">' + ops + '</select></div>' +
+        '<div class="campo" id="f-caja-tasa" hidden><label for="f-tasa">Porcentaje</label>' +
+        '<input type="tel" inputmode="decimal" id="f-tasa" autocomplete="off" placeholder="2">' +
+        '<p class="pista" id="f-tasa-ayuda"></p></div>';
+
+      $('f-periodo').onchange = function () { ajustarTasa(); previo(); };
+      $('f-tasa').oninput = previo;
+    }
+
+    function ajustarTasa() {
+      var per = $('f-periodo') ? $('f-periodo').value : '';
+      var caja = $('f-caja-tasa');
+      if (!caja) return;
+      caja.hidden = !per;
+      if (!per) return;
+      $('f-tasa-ayuda').textContent = per === 'fijo'
+        ? 'Se cobra una sola vez sobre el monto prestado, y no crece con el tiempo.'
+        : 'Se cobra sobre lo que quede debiendo, proporcional a los días que pasen.';
+    }
+
+    function interesElegido() {
+      var per = $('f-periodo') ? $('f-periodo').value : '';
+      var tasa = $('f-tasa') ? parseFloat(String($('f-tasa').value).replace(',', '.')) : 0;
+      if (!per || !tasa || tasa <= 0) return { periodo: '', tasa: 0 };
+      return { periodo: per, tasa: tasa };
+    }
+
+    function pintarPrestamos() {
+      var caja = $('f-prestamo');
+      var previoRef = $('f-ref') ? $('f-ref').value : null;
+
+      var lados = ladosReales();
+      if (tipoElegido() !== 'pago' || lados.de === lados.a) { caja.innerHTML = ''; return; }
+
+      // Quien recibe el abono es quien prestó, así que los préstamos van al revés.
+      var abiertos = prestamosEntre(lados.a, lados.de).filter(function (l) {
+        return !estadoPrestamo(l).saldado;
+      });
+
+      if (!abiertos.length) {
+        caja.innerHTML = '<p class="pista" style="margin:-4px 0 13px">' +
+          esc(lados.a) + ' no tiene préstamos abiertos con ' + esc(lados.de) +
+          '. El abono baja la deuda general.</p>';
+        return;
+      }
+
+      caja.innerHTML = '<div class="campo"><label for="f-ref">¿A cuál préstamo se le abona?</label>' +
+        '<select id="f-ref">' +
+        abiertos.map(function (l) {
+          var e = estadoPrestamo(l);
+          var etq = fechaCorta(l.fecha) + ' · ' + plata(l.monto) +
+            (e.conInteres ? ' al ' + tasaTexto(l) : '') +
+            ' · debe ' + plata(e.total) +
+            (l.nota ? ' · ' + l.nota : '');
+          return '<option value="' + l.id + '"' + (String(previoRef) === String(l.id) ? ' selected' : '') + '>' +
+                 esc(etq) + '</option>';
+        }).join('') +
+        '<option value=""' + (previoRef === '' ? ' selected' : '') + '>Sin asignar · baja la deuda general</option>' +
+        '</select></div>';
+
+      $('f-ref').onchange = previo;
+    }
+
+    function previo() {
+      var monto = +inMonto.value.replace(/\D/g, '');
+      var lados = ladosReales();
+      var de = lados.de, a = lados.a;
+      var caja = $('f-previo');
+      if ($('f-frase')) $('f-frase').textContent = de + ' le entrega la plata a ' + a;
+      if (!monto || de === a) { caja.innerHTML = ''; return; }
+
+      var antes = deudaEntre(de, a);
+      var despues = antes + monto;
+      var efecto = Math.round(despues) === 0
+        ? de + ' y ' + a + ' quedan a paz y salvo'
+        : (despues > 0
+            ? a + ' queda debiéndole ' + plata(despues) + ' a ' + de
+            : de + ' queda debiéndole ' + plata(despues) + ' a ' + a);
+
+      var extra = '';
+      var sel = $('f-ref');
+      if (tipoElegido() === 'pago' && sel && sel.value) {
+        var l = prestamoPorId(sel.value);
+        if (l) {
+          var e = estadoPrestamo(l);
+          var queda = e.total - monto;
+          extra = '<span class="efecto">' + (cero(queda) || queda < 0
+            ? 'El préstamo del ' + fechaCorta(l.fecha) + ' queda saldado' +
+              (queda < -1 ? ', y sobran ' + plata(queda) : '') +
+              (e.conInteres ? ' y deja de generar intereses' : '')
+            : 'Del préstamo del ' + fechaCorta(l.fecha) + ' quedarían ' + plata(queda)) + '</span>';
+        }
+      }
+
+      if (tipoElegido() === 'prestamo') {
+        var ie = interesElegido();
+        if (ie.tasa) {
+          extra = ie.periodo === 'fijo'
+            ? '<span class="efecto">Intereses: ' + plata(monto * ie.tasa / 100) + ' de una vez. Debería ' +
+              plata(monto + monto * ie.tasa / 100) + ' en total.</span>'
+            : '<span class="efecto">Intereses: ' + plata(monto * ie.tasa / 100) + ' por cada ' +
+              PERIODOS[ie.periodo].texto.toLowerCase().replace('mensual', 'mes')
+                .replace('trimestral', 'trimestre').replace('semestral', 'semestre').replace('anual', 'año') +
+              ', sobre lo que quede debiendo. Se detienen al pagar todo.</span>';
+        }
+      }
+
+      caja.innerHTML = '<div class="previo"><b>' + esc(de) + '</b> le entrega ' + plata(monto) + ' a <b>' + esc(a) + '</b>' +
+                       '<span class="efecto">' + esc(efecto) + '</span>' + extra + '</div>';
+    }
+
+    function refrescar() { pintarInteres(); ajustarTasa(); pintarPrestamos(); previo(); }
+
+    inMonto.oninput = previo;
+    selDe.onchange = refrescar;
+    selA.onchange = refrescar;
+    Array.prototype.forEach.call(panel.querySelectorAll('input[name=tipo]'), function (r) {
+      r.onchange = refrescar;
+    });
+    refrescar();
+
+    $('f-no').onclick = cerrar;
+    $('f-ok').onclick = function () {
+      var err = $('err');
+      var monto = +inMonto.value.replace(/\D/g, '');
+      var finales = ladosReales();
+      if (finales.de === finales.a) {
+        err.textContent = 'Elige dos personas distintas.'; err.hidden = false; return;
+      }
+      if (yo && finales.de !== yo && finales.a !== yo) {
+        err.textContent = 'Solo puedes registrar movimientos en los que participes.'; err.hidden = false; return;
+      }
+      if (!monto) {
+        err.textContent = 'Escribe un monto mayor que cero.'; err.hidden = false; inMonto.focus(); return;
+      }
+      var tipo = tipoElegido();
+      var sel = $('f-ref');
+      var ie = tipo === 'prestamo' ? interesElegido() : { periodo: '', tasa: 0 };
+      var mov = {
+        id: Date.now(),
+        fecha: $('f-fecha').value || hoy(),
+        de: finales.de,
+        a: finales.a,
+        tipo: tipo,
+        monto: monto,
+        tasa: ie.tasa,
+        periodo: ie.periodo,
+        ref: (tipo === 'pago' && sel) ? sel.value : '',
+        nota: $('f-nota').value.trim(),
+        borrado: false,
+        actualizado: Date.now()
+      };
+      registrar(function () { datos.movs.push(mov); }).then(cerrar);
+    };
+  }
+
+  function formConfig() {
+    panel.innerHTML = '';
+
+    if (!esDueno()) {
+      panel2.innerHTML = '<div class="hoja"><h3>Conexión con la hoja</h3>' +
+        '<p class="pista" style="margin:0">La dirección de la hoja solo la administra ' + esc(DUENO) + '.</p>' +
+        '<div class="acciones"><button class="btn ghost" id="f-no">Cerrar</button></div></div>';
+      $('f-no').onclick = cerrar;
+      return;
+    }
+
+    panel2.innerHTML =
+      '<div class="hoja"><h3>Conexión con la hoja</h3>' +
+      '<p class="pista" style="margin:0 0 12px">Pega aquí la dirección que te dio Apps Script al publicar la aplicación web. Termina en <b>/exec</b>.</p>' +
+      '<p class="error" id="err" hidden></p>' +
+      '<div class="campo"><label for="f-url">Dirección de la aplicación web</label>' +
+      '<input type="url" id="f-url" autocomplete="off" spellcheck="false" placeholder="https://script.google.com/macros/s/…/exec" value="' + esc(datos.url) + '"></div>' +
+      '<div class="acciones"><button class="btn" id="f-ok">Guardar y probar</button>' +
+      '<button class="btn ghost" id="f-no">Cancelar</button></div></div>';
+
+    $('f-no').onclick = cerrar;
+    $('f-ok').onclick = function () {
+      var u = $('f-url').value.trim();
+      var err = $('err');
+      if (u && !/^https:\/\/script\.google\.com\/.+\/exec$/.test(u)) {
+        err.textContent = 'Esa dirección no parece la de Apps Script. Debe empezar por https://script.google.com y terminar en /exec.';
+        err.hidden = false;
+        return;
+      }
+      datos.url = u;
+      guardar().then(function () { cerrar(); pintar(); if (u) sincronizar(false); });
+    };
+  }
+
+  /* ---------- eventos ---------- */
+  $('b-nuevo').onclick = formMov;
+  $('b-persona').onclick = formPersonas;
+  $('b-config').onclick = formConfig;
+  $('b-permisos').onclick = formPermisos;
+  $('b-clave').onclick = function () { formClave(datos.sesion); };
+  $('b-salir').onclick = pedirCierreSesion;
+
+  $('b-sel').onclick = function () {
+    if (modoSel) { salirDeSeleccion(); return; }
+    modoSel = true;
+    elegidos = {};
+    this.textContent = 'Listo';
+    pintarMovs();
+  };
+
+  $('buscar').oninput = function () {
+    busqueda = this.value.trim();
+    $('b-limpiar').hidden = !busqueda;
+    pintarMovs();
+  };
+  $('b-limpiar').onclick = function () {
+    busqueda = '';
+    $('buscar').value = '';
+    this.hidden = true;
+    $('buscar').focus();
+    pintarMovs();
+  };
+
+  $('b-borrar-todo').onclick = function () {
+    if (!confirm('Esto borra personas y movimientos de este dispositivo y también de la hoja. ¿Seguir?')) return;
+    registrar(function () {
+      var t = Date.now();
+      datos.personas.forEach(function (p) { p.borrado = true; p.actualizado = t; });
+      datos.movs.forEach(function (m) { m.borrado = true; m.actualizado = t; });
+      filtro = null;
+    }).then(cerrar);
+  };
+
+  window.addEventListener('online', function () { ultimoError = ''; sincronizar(true); });
+  window.addEventListener('offline', pintarEstado);
+  document.addEventListener('keydown', function (ev) {
+    if (ev.key === 'Escape' && fichaAbierta) cerrarFicha();
+  });
+  document.addEventListener('visibilitychange', function () {
+    if (!document.hidden && datos.url) sincronizar(true);
+  });
+  setInterval(function () { if (pendientes()) sincronizar(true); else pintarEstado(); }, 60000);
+
+  if ('serviceWorker' in navigator && location.protocol.indexOf('http') === 0) {
+    navigator.serviceWorker.register('sw.js').catch(function () {});
+  }
+
+  cargar();
+})();
+</script>
+</body>
+</html>

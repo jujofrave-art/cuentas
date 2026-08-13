@@ -1,0 +1,32 @@
+{
+  "name": "Cuentas claras",
+  "short_name": "Cuentas",
+  "description": "Préstamos y deudas de la familia, con respaldo en Google Sheets. Hecho por Juan José Franco Velásquez.",
+  "lang": "es-CO",
+  "start_url": "./index.html",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#E7EDE3",
+  "theme_color": "#E7EDE3",
+  "icons": [
+    {
+      "src": "icono-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "icono-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "icono-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "maskable"
+    }
+  ]
+}
