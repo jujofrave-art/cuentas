@@ -61,6 +61,10 @@ html,body{margin:0;background:var(--paper)}
 .estado[data-tono="error"] .punto{background:var(--debe)}
 .estado[data-tono="error"] .texto{color:var(--debe)}
 .estado .texto span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.estado[data-tono="error"]{align-items:flex-start}
+.estado[data-tono="error"] .texto{align-items:flex-start}
+.estado[data-tono="error"] .texto span{white-space:normal;overflow:visible;text-overflow:clip}
+.estado[data-tono="error"] .punto{margin-top:6px}
 
 /* ---------- bloques ---------- */
 .bloque{padding:22px 20px 0}
@@ -326,6 +330,7 @@ mark{background:#F4E7A8;color:inherit;padding:0 1px}
 .campo input[type=url]{font-family:var(--mono);font-size:12px}
 .par{display:grid;grid-template-columns:1fr auto 1fr;gap:8px;align-items:end}
 .par .flechita{padding-bottom:11px;color:var(--ink-soft);font-size:18px}
+.tasa-fila{display:grid;grid-template-columns:1fr 96px;gap:8px}
 .tipos{display:grid;gap:6px}
 .tipo{display:flex;align-items:center;gap:9px;border:1px solid var(--rule);background:#fff;padding:9px 11px;font-size:14px}
 .tipo:has(input:checked){border-color:var(--ink);background:#F0F5EE}
@@ -614,6 +619,27 @@ mark{background:#F4E7A8;color:inherit;padding:0 1px}
 
   function cero(v) { return Math.abs(v) < 1; }
 
+  var MESES_PERIODO = { mensual: 1, trimestral: 3, semestral: 6, anual: 12 };
+
+  /** Meses completos entre dos fechas. El 31 de enero cumple mes el 28 de febrero. */
+  function mesesCumplidos(a, b) {
+    var A = String(a).split('-').map(Number);
+    var B = String(b).split('-').map(Number);
+    if (A.length < 3 || B.length < 3) return 0;
+    var m = (B[0] - A[0]) * 12 + (B[1] - A[1]);
+    if (B[2] < A[2]) {
+      var ultimoDia = new Date(Date.UTC(B[0], B[1], 0)).getUTCDate();
+      if (!(B[2] === ultimoDia && A[2] > ultimoDia)) m--;
+    }
+    return Math.max(0, m);
+  }
+
+  function periodosCumplidos(inicio, hasta, periodo) {
+    var cada = MESES_PERIODO[periodo];
+    if (!cada) return 0;
+    return Math.floor(mesesCumplidos(inicio, hasta) / cada);
+  }
+
   function diasEntre(a, b) {
     var ms = Date.parse(String(b) + 'T00:00:00Z') - Date.parse(String(a) + 'T00:00:00Z');
     return isNaN(ms) ? 0 : Math.max(0, ms / 86400000);
@@ -621,8 +647,14 @@ mark{background:#F4E7A8;color:inherit;padding:0 1px}
 
   function abonosDe(idPrestamo) {
     var ref = String(idPrestamo);
+    var l = prestamoPorId(ref);
     return movsVivos().filter(function (m) {
-      return m.tipo === 'pago' && String(m.ref || '') === ref;
+      if (m.tipo !== 'pago' || String(m.ref || '') !== ref) return false;
+      // Un abono solo cuenta si va del que debe al que prestó. Si alguien
+      // editó la hoja y lo dejó apuntando a un préstamo de otra pareja,
+      // se ignora aquí en vez de descuadrar el seguimiento.
+      if (l && (m.de !== l.a || m.a !== l.de)) return false;
+      return true;
     }).sort(function (a, b) { return a.fecha === b.fecha ? a.id - b.id : (a.fecha < b.fecha ? -1 : 1); });
   }
 
@@ -634,22 +666,43 @@ mark{background:#F4E7A8;color:inherit;padding:0 1px}
   function estadoPrestamo(l) {
     var tasa = Number(l.tasa) || 0;
     var periodo = PERIODOS[l.periodo] ? l.periodo : '';
+    var enPesos = l.unidad === '$';
     var capital = l.monto;
-    var causado = (periodo === 'fijo') ? l.monto * tasa / 100 : 0;
+
+    // De una sola vez: el porcentaje se calcula sobre lo prestado; en pesos, es el monto tal cual.
+    var causado = (periodo === 'fijo') ? (enPesos ? tasa : l.monto * tasa / 100) : 0;
     var pagadoInteres = 0;
-    var porDia = (periodo && periodo !== 'fijo' && tasa)
+
+    // Por período hay dos formas de contar:
+    //  · en pesos, se cobra la cuota entera cada vez que se cumple un período;
+    //  · en porcentaje, corre día a día sobre lo que se deba.
+    var porCuota = (enPesos && periodo && periodo !== 'fijo' && tasa) ? tasa : 0;
+    var factorDia = (!enPesos && periodo && periodo !== 'fijo' && tasa)
       ? (tasa / 100) / PERIODOS[periodo].dias
       : 0;
+    var cuotasCobradas = 0;
 
     var fecha = l.fecha;
 
     function correr(hasta) {
-      if (porDia && capital > 0) causado += capital * porDia * diasEntre(fecha, hasta);
+      if (capital > 0) {
+        if (porCuota) {
+          var n = periodosCumplidos(l.fecha, hasta, periodo);
+          if (n > cuotasCobradas) {
+            causado += (n - cuotasCobradas) * porCuota;
+            cuotasCobradas = n;
+          }
+        } else if (factorDia) {
+          causado += capital * factorDia * diasEntre(fecha, hasta);
+        }
+      }
       if (Date.parse(hasta + 'T00:00:00Z') > Date.parse(fecha + 'T00:00:00Z')) fecha = hasta;
     }
 
     abonosDe(l.id).forEach(function (p) {
-      correr(p.fecha);
+      // Un abono con fecha del futuro (casi siempre un error al digitar) se
+      // trata como de hoy: ni cobra intereses de más ni desaparece de la cuenta.
+      correr(p.fecha > hoy() ? hoy() : p.fecha);
       var aCapital = Math.min(p.monto, capital);
       capital -= aCapital;
       pagadoInteres += p.monto - aCapital;
@@ -666,7 +719,7 @@ mark{background:#F4E7A8;color:inherit;padding:0 1px}
       abonado: abonado,
       total: capital + pendiente,
       conInteres: !!(tasa && periodo),
-      detenido: !!porDia && cero(capital),
+      detenido: !!(porCuota || factorDia) && cero(capital),
       saldado: cero(capital) && cero(pendiente)
     };
   }
@@ -680,8 +733,9 @@ mark{background:#F4E7A8;color:inherit;padding:0 1px}
   function tasaTexto(l) {
     var tasa = Number(l.tasa) || 0;
     if (!tasa || !l.periodo) return '';
-    if (l.periodo === 'fijo') return tasa + '% fijo';
-    return tasa + '% ' + PERIODOS[l.periodo].texto.toLowerCase();
+    var cuanto = (l.unidad === '$') ? plata(tasa) : tasa + '%';
+    if (l.periodo === 'fijo') return cuanto + ' fijo';
+    return cuanto + ' ' + PERIODOS[l.periodo].texto.toLowerCase();
   }
 
   function prestamoPorId(id) {
@@ -1069,13 +1123,17 @@ mark{background:#F4E7A8;color:inherit;padding:0 1px}
   }
 
   /** Con contraseña se entra; sin ella, la puerta pasa a pedir que la creen. */
-  function abrirSesionO(tieneContrasena) {
+  /**
+   * yaTraeDatos: la entrada por la hoja ya vino con todo, así que no hace falta
+   * un segundo viaje. Solo la entrada sin señal necesita ponerse al día después.
+   */
+  function abrirSesionO(tieneContrasena, yaTraeDatos) {
     ultimoError = '';
     if (!tieneContrasena) { puertaModo = 'crear'; pintarPuerta(); return; }
     puertaModo = 'entrar';
     pintarPuerta();
     pintar();
-    if (datos.url) sincronizar(true);
+    if (datos.url && !yaTraeDatos && navigator.onLine) sincronizar(true);
   }
 
   /**
@@ -1159,6 +1217,8 @@ mark{background:#F4E7A8;color:inherit;padding:0 1px}
     $('pu-entrar').disabled = true;
     $('pu-entrar').textContent = 'Entrando…';
 
+    // Un solo viaje: cada ida y vuelta a Apps Script cuesta más que las
+    // vueltas de cifrado que se ahorrarían partiéndolo en dos.
     conTiempo(fetch(datos.url, {
       method: 'POST',
       headers: { 'Content-Type': 'text/plain;charset=utf-8' },
@@ -1190,7 +1250,7 @@ mark{background:#F4E7A8;color:inherit;padding:0 1px}
         datos.sesion = correo;
         datos.ficha = tieneClave(p) ? fichaDe(p.hash, correo) : (resp.ficha || '');
         datos.ultimoSync = Date.now();
-        return guardar().then(function () { abrirSesionO(tieneClave(p)); });
+        return guardar().then(function () { abrirSesionO(tieneClave(p), true); });
       })
       .catch(function (err) {
         var p = permisoDe(correo);
@@ -1340,12 +1400,12 @@ mark{background:#F4E7A8;color:inherit;padding:0 1px}
     if (p.actualizado <= datos.ultimoSync) datos.ficha = fichaDe(p.hash, datos.sesion);
   }
 
-  /** Si la hoja no contesta en 25 segundos, se corta: más vale un aviso que quedarse colgado. */
+  /** Si la hoja no contesta en 45 segundos, se corta: más vale un aviso que quedarse colgado. */
   function conTiempo(promesa) {
     return Promise.race([
       promesa,
       new Promise(function (_, rechazar) {
-        setTimeout(function () { rechazar(new Error('sin-respuesta')); }, 25000);
+        setTimeout(function () { rechazar(new Error('sin-respuesta')); }, 45000);
       })
     ]);
   }
@@ -1355,7 +1415,7 @@ mark{background:#F4E7A8;color:inherit;padding:0 1px}
     if (m.indexOf('sin-respuesta') > -1) {
       return location.protocol === 'file:'
         ? 'La hoja no respondió. Abriendo la app como archivo local esto es normal: publícala en internet.'
-        : 'La hoja no respondió a tiempo. Revisa la conexión y vuelve a sincronizar.';
+        : 'La hoja se demoró demasiado. Vuelve a darle a Sincronizar; lo que registraste no se perdió.';
     }
     if (/Failed to fetch|NetworkError|Load failed/i.test(m)) {
       return location.protocol === 'file:'
@@ -2374,7 +2434,8 @@ mark{background:#F4E7A8;color:inherit;padding:0 1px}
       '<div class="campo"><label>Cómo se llama</label><div class="tipos">' + tipos + '</div></div>' +
       '<div id="f-interes"></div>' +
       '<div id="f-prestamo"></div>' +
-      '<div class="campo"><label for="f-fecha">Fecha</label><input type="date" id="f-fecha" value="' + hoy() + '"></div>' +
+      '<div class="campo"><label for="f-fecha">Fecha</label>' +
+      '<input type="date" id="f-fecha" max="' + hoy() + '" value="' + hoy() + '"></div>' +
       '<div class="campo"><label for="f-nota">Nota (opcional)</label>' +
       '<input type="text" id="f-nota" autocomplete="off" placeholder="Para el arriendo"></div>' +
       '<div class="acciones"><button class="btn" id="f-ok">Guardar movimiento</button>' +
@@ -2409,12 +2470,19 @@ mark{background:#F4E7A8;color:inherit;padding:0 1px}
       caja.innerHTML =
         '<div class="campo"><label for="f-periodo">Intereses</label>' +
         '<select id="f-periodo">' + ops + '</select></div>' +
-        '<div class="campo" id="f-caja-tasa" hidden><label for="f-tasa">Porcentaje</label>' +
-        '<input type="tel" inputmode="decimal" id="f-tasa" autocomplete="off" placeholder="2">' +
+        '<div class="campo" id="f-caja-tasa" hidden><label for="f-tasa">Cuánto de interés</label>' +
+        '<div class="tasa-fila">' +
+          '<input type="tel" inputmode="decimal" id="f-tasa" autocomplete="off" placeholder="2">' +
+          '<select id="f-unidad" aria-label="Porcentaje o pesos">' +
+            '<option value="%">%</option>' +
+            '<option value="$">pesos</option>' +
+          '</select>' +
+        '</div>' +
         '<p class="pista" id="f-tasa-ayuda"></p></div>';
 
       $('f-periodo').onchange = function () { ajustarTasa(); previo(); };
-      $('f-tasa').oninput = previo;
+      $('f-tasa').oninput = function () { ajustarTasa(); previo(); };
+      $('f-unidad').onchange = function () { ajustarTasa(); previo(); };
     }
 
     function ajustarTasa() {
@@ -2423,16 +2491,34 @@ mark{background:#F4E7A8;color:inherit;padding:0 1px}
       if (!caja) return;
       caja.hidden = !per;
       if (!per) return;
+
+      var enPesos = $('f-unidad').value === '$';
+      var campo = $('f-tasa');
+      campo.placeholder = enPesos ? '50.000' : '2';
+
+      if (enPesos) {
+        var n = +String(campo.value).replace(/\D/g, '');
+        campo.value = n ? n.toLocaleString('es-CO') : '';
+      }
+
       $('f-tasa-ayuda').textContent = per === 'fijo'
-        ? 'Se cobra una sola vez sobre el monto prestado, y no crece con el tiempo.'
-        : 'Se cobra sobre lo que quede debiendo, proporcional a los días que pasen.';
+        ? (enPesos
+            ? 'Se cobra esa cantidad una sola vez, y no crece con el tiempo.'
+            : 'Se cobra una sola vez sobre el monto prestado, y no crece con el tiempo.')
+        : (enPesos
+            ? 'Esa cantidad completa cada vez que se cumple el período. No baja al abonar, y se detiene al saldar.'
+            : 'Se cobra sobre lo que quede debiendo, proporcional a los días que pasen.');
     }
 
     function interesElegido() {
       var per = $('f-periodo') ? $('f-periodo').value : '';
-      var tasa = $('f-tasa') ? parseFloat(String($('f-tasa').value).replace(',', '.')) : 0;
-      if (!per || !tasa || tasa <= 0) return { periodo: '', tasa: 0 };
-      return { periodo: per, tasa: tasa };
+      var uni = $('f-unidad') ? $('f-unidad').value : '%';
+      var crudo = $('f-tasa') ? String($('f-tasa').value) : '';
+      var tasa = (uni === '$')
+        ? +crudo.replace(/\D/g, '')
+        : parseFloat(crudo.replace(',', '.'));
+      if (!per || !tasa || tasa <= 0) return { periodo: '', tasa: 0, unidad: '%' };
+      return { periodo: per, tasa: tasa, unidad: uni };
     }
 
     function pintarPrestamos() {
@@ -2505,13 +2591,19 @@ mark{background:#F4E7A8;color:inherit;padding:0 1px}
       if (tipoElegido() === 'prestamo') {
         var ie = interesElegido();
         if (ie.tasa) {
+          var enPesos = ie.unidad === '$';
+          var porVez = enPesos ? ie.tasa : monto * ie.tasa / 100;
+          var cadaCuanto = PERIODOS[ie.periodo].texto.toLowerCase()
+            .replace('mensual', 'mes').replace('trimestral', 'trimestre')
+            .replace('semestral', 'semestre').replace('anual', 'año');
+
           extra = ie.periodo === 'fijo'
-            ? '<span class="efecto">Intereses: ' + plata(monto * ie.tasa / 100) + ' de una vez. Debería ' +
-              plata(monto + monto * ie.tasa / 100) + ' en total.</span>'
-            : '<span class="efecto">Intereses: ' + plata(monto * ie.tasa / 100) + ' por cada ' +
-              PERIODOS[ie.periodo].texto.toLowerCase().replace('mensual', 'mes')
-                .replace('trimestral', 'trimestre').replace('semestral', 'semestre').replace('anual', 'año') +
-              ', sobre lo que quede debiendo. Se detienen al pagar todo.</span>';
+            ? '<span class="efecto">Intereses: ' + plata(porVez) + ' de una vez. Debería ' +
+              plata(monto + porVez) + ' en total.</span>'
+            : '<span class="efecto">Intereses: ' + plata(porVez) + ' por cada ' + cadaCuanto + ', ' +
+              (enPesos ? 'cobrados al cumplirse cada uno, sin bajar aunque abone'
+                       : 'sobre lo que quede debiendo, proporcional a los días') +
+              '. Se detienen al pagar todo.</span>';
         }
       }
 
@@ -2543,18 +2635,25 @@ mark{background:#F4E7A8;color:inherit;padding:0 1px}
       if (!monto) {
         err.textContent = 'Escribe un monto mayor que cero.'; err.hidden = false; inMonto.focus(); return;
       }
+      var cuando = $('f-fecha').value || hoy();
+      if (cuando > hoy()) {
+        err.textContent = 'La fecha no puede ser del futuro. Registra lo que ya pasó.';
+        err.hidden = false;
+        return;
+      }
       var tipo = tipoElegido();
       var sel = $('f-ref');
       var ie = tipo === 'prestamo' ? interesElegido() : { periodo: '', tasa: 0 };
       var mov = {
         id: Date.now(),
-        fecha: $('f-fecha').value || hoy(),
+        fecha: cuando,
         de: finales.de,
         a: finales.a,
         tipo: tipo,
         monto: monto,
         tasa: ie.tasa,
         periodo: ie.periodo,
+        unidad: ie.unidad || '%',
         ref: (tipo === 'pago' && sel) ? sel.value : '',
         nota: $('f-nota').value.trim(),
         borrado: false,
