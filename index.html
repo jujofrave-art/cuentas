@@ -763,7 +763,7 @@ mark{background:#F4E7A8;color:inherit;padding:0 1px}
       asegurarDueno();
       listo = true;
       pintar();
-      if (datos.url) sincronizar(true);
+      if (datos.url && sesionValida()) sincronizar(true);
     });
   }
 
@@ -1070,10 +1070,12 @@ mark{background:#F4E7A8;color:inherit;padding:0 1px}
 
   /** Con contraseña se entra; sin ella, la puerta pasa a pedir que la creen. */
   function abrirSesionO(tieneContrasena) {
+    ultimoError = '';
     if (!tieneContrasena) { puertaModo = 'crear'; pintarPuerta(); return; }
     puertaModo = 'entrar';
     pintarPuerta();
     pintar();
+    if (datos.url) sincronizar(true);
   }
 
   /**
@@ -1256,6 +1258,8 @@ mark{background:#F4E7A8;color:inherit;padding:0 1px}
   /* ---------- sincronización ---------- */
   function sincronizar(silencioso) {
     if (sincronizando) return Promise.resolve();
+    // Sin sesión no hay a nombre de quién hablarle a la hoja.
+    if (!sesionValida()) { pintarEstado(); return Promise.resolve(); }
     if (!datos.url) {
       if (!silencioso) ultimoError = 'Falta conectar la hoja.';
       pintarEstado();
@@ -2609,9 +2613,12 @@ mark{background:#F4E7A8;color:inherit;padding:0 1px}
     if (ev.key === 'Escape' && fichaAbierta) cerrarFicha();
   });
   document.addEventListener('visibilitychange', function () {
-    if (!document.hidden && datos.url) sincronizar(true);
+    if (!document.hidden && datos.url && sesionValida()) sincronizar(true);
   });
-  setInterval(function () { if (pendientes()) sincronizar(true); else pintarEstado(); }, 60000);
+  setInterval(function () {
+    if (!sesionValida()) return;
+    if (pendientes()) sincronizar(true); else pintarEstado();
+  }, 60000);
 
   if ('serviceWorker' in navigator && location.protocol.indexOf('http') === 0) {
     navigator.serviceWorker.register('sw.js').catch(function () {});
