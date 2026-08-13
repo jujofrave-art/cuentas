@@ -438,6 +438,7 @@ mark{background:#F4E7A8;color:inherit;padding:0 1px}
 
   var datos = { personas: [], movs: [], permisos: [], sesion: '', ficha: '', url: '', ultimoSync: 0 };
   var ultimoCorreo = '';
+  var puertaModo = 'entrar';   // 'entrar' o 'crear'
   var filtro = null;
   var busqueda = '';
   var modoSel = false;
@@ -803,7 +804,9 @@ mark{background:#F4E7A8;color:inherit;padding:0 1px}
     migrarPermisos();
     var d = datos.permisos.filter(function (p) { return normCorreo(p.correo) === DUENO; })[0];
     if (!d) {
-      d = { correo: DUENO, sal: '', hash: '', protegido: true, borrado: false, actualizado: Date.now() };
+      // actualizado en 1, no en Date.now(): es solo una semilla para no quedar
+      // encerrados fuera. Cualquier registro real de la hoja debe ganarle.
+      d = { correo: DUENO, sal: '', hash: '', protegido: true, borrado: false, actualizado: 1 };
       LLAVES.forEach(function (k) { d[k] = true; });
       datos.permisos.push(d);
       return;
@@ -813,7 +816,9 @@ mark{background:#F4E7A8;color:inherit;padding:0 1px}
       LLAVES.forEach(function (k) { d[k] = true; });
       d.protegido = true;
       d.borrado = false;
-      d.actualizado = Date.now();
+      // sin tocar la fecha si no hay contraseña todavía: si la hoja tiene una,
+      // debe poder llegar y ganar.
+      if (d.hash) d.actualizado = Date.now();
     }
   }
 
@@ -1003,9 +1008,13 @@ mark{background:#F4E7A8;color:inherit;padding:0 1px}
 
   function sesionValida() { return !!datos.sesion && puedeEntrar(datos.sesion); }
 
+  /** Mientras la puerta esté abierta, la app de atrás queda tapada por completo. */
+  function puertaAbierta() { return puertaModo === 'crear' || !sesionValida(); }
+
   function pintarPuerta(mensaje, tono) {
     var caja = $('puerta');
-    if (sesionValida()) { caja.innerHTML = ''; document.body.style.overflow = fichaAbierta ? 'hidden' : ''; return; }
+    if (!puertaAbierta()) { caja.innerHTML = ''; document.body.style.overflow = fichaAbierta ? 'hidden' : ''; return; }
+    if (puertaModo === 'crear') { pintarPuertaClave(mensaje); return; }
 
     caja.innerHTML =
       '<div class="puerta"><div class="caja">' +
@@ -1036,10 +1045,15 @@ mark{background:#F4E7A8;color:inherit;padding:0 1px}
       ultimoCorreo = c;
       if (!c) { pintarPuerta('Escribe tu correo.'); return; }
 
-      var p = permisoDe(c);
+      // La hoja es la que manda. Si hay internet se le pregunta a ella, aunque
+      // este dispositivo crea saber la respuesta: su copia puede estar vieja.
+      if (datos.url && navigator.onLine) { entrarConLaHoja(c, clave); return; }
 
-      // Sin el permiso guardado en este dispositivo hay que preguntarle a la hoja.
-      if (!p) { entrarConLaHoja(c, clave); return; }
+      var p = permisoDe(c);
+      if (!p) {
+        pintarPuerta('Este dispositivo no conoce ese correo todavía. La primera entrada necesita internet.');
+        return;
+      }
       if (!p.entrar) { pintarPuerta('El correo ' + c + ' no tiene acceso a esta app.'); return; }
 
       if (tieneClave(p)) {
@@ -1050,17 +1064,83 @@ mark{background:#F4E7A8;color:inherit;padding:0 1px}
       }
 
       datos.sesion = c;
-      guardar().then(function () { pintarPuerta(); pintar(); invitarAClave(); });
+      guardar().then(function () { abrirSesionO(tieneClave(p)); });
     };
   }
 
-  /** Si la persona todavía no tiene contraseña, se le ofrece ponerla apenas entra. */
-  function invitarAClave() {
-    var p = permisoDe(datos.sesion);
-    if (!p || tieneClave(p)) return;
-    formClave(datos.sesion);
-    var caja = panel2.querySelector('.hoja');
-    if (caja) caja.scrollIntoView({ behavior: 'smooth', block: 'center' });
+  /** Con contraseña se entra; sin ella, la puerta pasa a pedir que la creen. */
+  function abrirSesionO(tieneContrasena) {
+    if (!tieneContrasena) { puertaModo = 'crear'; pintarPuerta(); return; }
+    puertaModo = 'entrar';
+    pintarPuerta();
+    pintar();
+  }
+
+  /**
+   * Pantalla obligatoria de creación de contraseña. Va dentro de la puerta,
+   * así que la app de atrás queda tapada: nadie puede registrar nada
+   * mientras no tenga contraseña.
+   */
+  function pintarPuertaClave(mensaje) {
+    var caja = $('puerta');
+    var correo = normCorreo(datos.sesion || ultimoCorreo);
+
+    caja.innerHTML =
+      '<div class="puerta"><div class="caja">' +
+        '<h2>Crea tu contraseña</h2>' +
+        '<div class="sub">' + esc(correo) + '</div>' +
+        (mensaje ? '<p class="error">' + esc(mensaje) + '</p>' : '') +
+        '<p class="aviso" style="border:0;margin:0 0 16px;padding:0">Tu correo todavía no tiene contraseña. ' +
+        'Ponla ahora para poder usar la app.</p>' +
+        '<div class="campo"><label for="pc-nueva">Contraseña nueva</label>' +
+        '<input type="password" id="pc-nueva" autocomplete="new-password" placeholder="mínimo 6 caracteres"></div>' +
+        '<div class="campo"><label for="pc-otra">Repítela</label>' +
+        '<input type="password" id="pc-otra" autocomplete="new-password"></div>' +
+        '<div class="acciones"><button class="btn" id="pc-ok">Guardar contraseña</button>' +
+        '<button class="btn ghost" id="pc-no">Salir</button></div>' +
+        '<p class="aviso">Al guardarla se cierra la sesión: vas a entrar de nuevo, ahora con tu correo y tu contraseña.</p>' +
+      '</div></div>';
+
+    document.body.style.overflow = 'hidden';
+    ponerOjos(caja);
+    $('pc-nueva').focus();
+    $('pc-otra').onkeydown = function (ev) { if (ev.key === 'Enter') $('pc-ok').click(); };
+
+    $('pc-no').onclick = function () {
+      puertaModo = 'entrar';
+      cerrarSesion();
+    };
+
+    $('pc-ok').onclick = function () {
+      var nueva = $('pc-nueva').value;
+      var otra = $('pc-otra').value;
+
+      if (nueva.length < 6) { pintarPuertaClave('Usa al menos 6 caracteres.'); return; }
+      if (nueva !== otra) { pintarPuertaClave('Las dos contraseñas no son iguales.'); return; }
+
+      var sal = salAleatoria();
+      var hash = hashClave(nueva, sal);
+      var boton = $('pc-ok');
+      boton.disabled = true;
+      boton.textContent = 'Guardando…';
+
+      registrar(function () {
+        datos.permisos.forEach(function (x) {
+          if (normCorreo(x.correo) !== correo) return;
+          x.sal = sal; x.hash = hash; x.actualizado = Date.now();
+        });
+      })
+        .then(function () { return datos.url ? sincronizar(false) : null; })
+        .then(function () {
+          var aviso = (datos.url && ultimoError)
+            ? 'Contraseña guardada en este dispositivo. Se subirá a la hoja cuando haya señal.'
+            : 'Contraseña creada. Entra con ella.';
+          puertaModo = 'entrar';
+          datos.sesion = '';
+          datos.ficha = '';
+          guardar().then(function () { pintar(); pintarPuerta(aviso, 'aviso'); });
+        });
+    };
   }
 
   /** Primera entrada en un dispositivo: la hoja confirma el correo y la contraseña. */
@@ -1085,19 +1165,48 @@ mark{background:#F4E7A8;color:inherit;padding:0 1px}
     }))
       .then(function (r) { return r.json(); })
       .then(function (resp) {
-        if (resp.error) { pintarPuerta(resp.error); return; }
+        if (resp.error) {
+          $('pu-entrar').disabled = false;
+          $('pu-entrar').textContent = 'Entrar';
+          pintarPuerta(resp.error);
+          return;
+        }
         fusionar(resp);
+
+        // Segunda comprobación contra lo ya mezclado, por si este dispositivo
+        // traía una contraseña recién puesta que la hoja aún no conoce.
+        var p = permisoDe(correo);
+        if (!p || !p.entrar) { pintarPuerta('El correo ' + correo + ' no tiene acceso a esta app.'); return; }
+        if (tieneClave(p) && !claveCorrecta(p, clave)) {
+          $('pu-entrar').disabled = false;
+          $('pu-entrar').textContent = 'Entrar';
+          pintarPuerta('Contraseña incorrecta.');
+          return;
+        }
+
         datos.sesion = correo;
-        datos.ficha = resp.ficha || '';
+        datos.ficha = tieneClave(p) ? fichaDe(p.hash, correo) : (resp.ficha || '');
         datos.ultimoSync = Date.now();
-        return guardar().then(function () { pintarPuerta(); pintar(); invitarAClave(); });
+        return guardar().then(function () { abrirSesionO(tieneClave(p)); });
       })
-      .catch(function (err) { pintarPuerta(mensajeError(err)); });
+      .catch(function (err) {
+        var p = permisoDe(correo);
+        if (p && p.entrar && tieneClave(p) && claveCorrecta(p, clave)) {
+          datos.ficha = fichaDe(p.hash, correo);
+          datos.sesion = correo;
+          guardar().then(function () { pintarPuerta(); pintar(); });
+          return;
+        }
+        $('pu-entrar').disabled = false;
+        $('pu-entrar').textContent = 'Entrar';
+        pintarPuerta(mensajeError(err));
+      });
   }
 
   function cerrarSesion() {
     datos.sesion = '';
     datos.ficha = '';
+    puertaModo = 'entrar';
     guardar().then(function () { pintar(); pintarPuerta(); });
   }
 
