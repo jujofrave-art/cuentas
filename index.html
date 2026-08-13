@@ -417,8 +417,12 @@ mark{background:#F4E7A8;color:inherit;padding:0 1px}
   </section>
 
   <p class="pie" id="pie">Todo se guarda primero en este dispositivo, así que puedes registrar sin señal. Cuando hay internet, los cambios suben solos a la hoja de Google.<br>
-    <span style="font-family:var(--mono);font-size:10px;letter-spacing:.1em">VERSIÓN 12 AGO 2026 · CON INTERESES, CONTRASEÑAS Y PERMISOS</span>
+    <span style="font-family:var(--mono);font-size:10px;letter-spacing:.1em">VERSIÓN 2026.08.13-C</span>
     <span class="firma">Hecho por Juan José Franco Velásquez</span></p>
+
+  <p class="pie" style="border:0;margin-top:0;padding-top:0">
+    <button class="btn ghost mini" id="b-version">¿Estoy en la última versión?</button>
+  </p>
 </div>
 
 <div id="ficha"></div>
@@ -434,7 +438,7 @@ mark{background:#F4E7A8;color:inherit;padding:0 1px}
 
   // Pega aquí la dirección /exec una sola vez, antes de subir la app.
   // Así nadie más tiene que escribirla ni verla en pantalla.
-  var URL_HOJA = 'https://script.google.com/macros/s/AKfycbzwpYX9N9FdK1_-tvXRxMtdBV-HWbJXTbxWHNWg6Tj35tZh_g-G6KvZhXIyhPWy7XAG/exec';
+  var URL_HOJA = 'https://script.google.com/macros/s/AKfycbww2Mv8JwHtrx8e7Sj5uxIpaKavvprwqOVwavUVHgcsEdt_rhvuEb7cwi5OxsGGmWAd/exec';
 
   var TIPOS = {
     prestamo: { texto: 'Préstamo',      corto: 'Préstamo' },
@@ -2705,6 +2709,16 @@ mark{background:#F4E7A8;color:inherit;padding:0 1px}
   $('b-clave').onclick = function () { formClave(datos.sesion); };
   $('b-salir').onclick = pedirCierreSesion;
 
+  $('b-version').onclick = function () {
+    var sw = ('serviceWorker' in navigator) ? 'sí' : 'no';
+    alert('Versión instalada: 2026.08.13-C\n\n' +
+      'Fechas futuras bloqueadas: sí\n' +
+      'Espera a la hoja: 45 segundos\n' +
+      'Intereses en pesos por período cumplido: sí\n' +
+      'Copia sin señal activa: ' + sw + '\n\n' +
+      'Si esta pantalla no aparece, estás en una versión anterior.');
+  };
+
   $('b-sel').onclick = function () {
     if (modoSel) { salirDeSeleccion(); return; }
     modoSel = true;
@@ -2744,9 +2758,15 @@ mark{background:#F4E7A8;color:inherit;padding:0 1px}
   document.addEventListener('visibilitychange', function () {
     if (!document.hidden && datos.url && sesionValida()) sincronizar(true);
   });
+  // Cada minuto sube lo que haya pendiente. Y cada cinco baja lo nuevo aunque
+  // no tenga nada que subir: si no, un dispositivo abierto nunca se entera de
+  // los cambios que hicieron en otro.
+  var vueltas = 0;
   setInterval(function () {
     if (!sesionValida()) return;
-    if (pendientes()) sincronizar(true); else pintarEstado();
+    vueltas++;
+    if (pendientes() || vueltas % 5 === 0) sincronizar(true);
+    else pintarEstado();
   }, 60000);
 
   if ('serviceWorker' in navigator && location.protocol.indexOf('http') === 0) {
