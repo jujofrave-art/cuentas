@@ -429,6 +429,7 @@ textarea.tsv{
     <div class="acciones">
       <button class="btn ghost mini" id="b-clave">Mi contraseña</button>
       <button class="btn ghost mini" id="b-permisos">Permisos</button>
+      <button class="btn ghost mini" id="b-papelera">Papelera</button>
       <button class="btn ghost mini" id="b-exportar">Exportar a una hoja</button>
       <button class="btn ghost mini peligro" id="b-borrar-todo">Borrar todo</button>
       <button class="btn ghost mini peligro" id="b-salir">Cerrar sesión</button>
@@ -484,7 +485,7 @@ import {
 } from 'https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js';
 import {
   initializeFirestore, persistentLocalCache, persistentMultipleTabManager,
-  collection, doc, getDoc, setDoc, onSnapshot, query, where
+  collection, doc, getDoc, getDocs, setDoc, deleteDoc, onSnapshot, query, where, orderBy
 } from 'https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js';
 
 (function () {
@@ -506,7 +507,7 @@ import {
     appId: '1:754021039496:web:4ddf05feec8d2dac1ece3d'
   };
 
-  var VERSION = 'firebase-2026.08.14-F';
+  var VERSION = 'firebase-2026.08.14-H';
   var DUENO = 'jujofrave@gmail.com';
 
   var TIPOS = {
@@ -540,6 +541,7 @@ import {
   var COL_PERS = 'personas';
   var COL_MOVS = 'movimientos';
   var COL_PERM = 'permisos';
+  var COL_PAPELERA = 'papelera';
 
   var escuchas = [];        // para soltar los oyentes al cerrar sesión
   var miPermiso = null;     // el permiso propio, leído al entrar
@@ -1090,6 +1092,17 @@ import {
     fn();
     var tareas = [];
 
+    // Lo que quedó marcado como borrado no se guarda: se manda a la papelera
+    // y se elimina de verdad de su colección.
+    var movsFuera = datos.movs.filter(function (m) { return m.borrado; });
+    var persFuera = datos.personas.filter(function (p) { return p.borrado; });
+
+    movsFuera.forEach(function (m) { tareas.push(aLaPapelera('mov', m)); });
+    persFuera.forEach(function (p) { tareas.push(aLaPapelera('persona', p)); });
+
+    datos.movs = datos.movs.filter(function (m) { return !m.borrado; });
+    datos.personas = datos.personas.filter(function (p) { return !p.borrado; });
+
     datos.personas.forEach(function (x) {
       if (antes.pers[llavePersona(x)] !== JSON.stringify(x)) tareas.push(guardarPersona(x));
     });
@@ -1102,6 +1115,41 @@ import {
 
     pintar();
     return Promise.all(tareas).catch(function () {});
+  }
+
+  /**
+   * Guarda una copia en la papelera y borra el original. Así las listas
+   * quedan limpias, pero un borrado por error todavía se puede deshacer.
+   */
+  function aLaPapelera(clase, registro) {
+    var copia = {};
+    for (var k in registro) if (k !== 'borrado') copia[k] = registro[k];
+
+    var llave = (clase === 'mov') ? 'mov_' + registro.id : 'per_' + llavePersona(registro);
+    var participantes = (clase === 'mov')
+      ? participantesDe(registro.de, registro.a)
+      : [normCorreo(registro.correo)].filter(Boolean);
+
+    escribiendo++;
+    pintarEstado();
+    return setDoc(doc(db, COL_PAPELERA, llave), {
+      clase: clase,
+      datos: copia,
+      participantes: participantes,
+      borradoPor: datos.sesion,
+      borradoEn: Date.now()
+    })
+      .then(function () {
+        var coleccion = (clase === 'mov') ? COL_MOVS : COL_PERS;
+        var id = (clase === 'mov') ? String(registro.id) : llavePersona(registro);
+        return deleteDoc(doc(db, coleccion, id));
+      })
+      .then(function () { escribiendo--; pintarEstado(); })
+      .catch(function (err) {
+        escribiendo--;
+        ultimoError = mensajeError(err);
+        pintarEstado();
+      });
   }
 
   function llavePersona(p) { return normCorreo(p.correo) || p.nombre; }
@@ -1118,18 +1166,19 @@ import {
 
   function normCorreo(c) { return String(c || '').trim().toLowerCase(); }
 
-  var LLAVES = ['entrar', 'editarPers', 'borrarMovs', 'borrarPers', 'admin'];
+  var LLAVES = ['entrar', 'editarPers', 'borrarMovs', 'borrarPers', 'papelera', 'admin'];
 
   var NOMBRE_LLAVE = {
     entrar: 'Pueden entrar a la app',
     editarPers: 'Pueden crear y editar personas',
     borrarMovs: 'Pueden eliminar movimientos',
     borrarPers: 'Pueden eliminar personas',
+    papelera: 'Pueden abrir la papelera y restaurar',
     admin: 'Pueden ver y dar permisos'
   };
 
   var CORTO_LLAVE = { entrar: 'ENTRA', editarPers: 'EDITA PERS', borrarMovs: 'BORRA MOVS',
-                      borrarPers: 'BORRA PERS', admin: 'ADMINISTRA' };
+                      borrarPers: 'BORRA PERS', papelera: 'PAPELERA', admin: 'ADMINISTRA' };
 
   /** Los permisos viejos tenían una sola llave "borrar"; se reparte en las tres nuevas. */
   function migrarPermisos() {
@@ -1141,6 +1190,7 @@ import {
       }
       // quien ya podía borrar personas, con más razón puede editarlas
       if (p.editarPers === undefined) p.editarPers = !!p.borrarPers;
+      if (p.papelera === undefined) p.papelera = !!p.admin;
       LLAVES.forEach(function (k) { if (p[k] === undefined) p[k] = false; });
       if (p.borrar !== undefined) delete p.borrar;
     });
@@ -1178,6 +1228,8 @@ import {
   function puedeBorrarMovs() { return tengo('borrarMovs'); }
   function puedeBorrarPers() { return tengo('borrarPers'); }
   function esAdmin() { return tengo('admin'); }
+  /** Quien administra siempre puede, aunque su documento sea de antes de esta área. */
+  function puedeUsarPapelera() { return esAdmin() || tengo('papelera'); }
   function esDueno() { return normCorreo(datos.sesion) === DUENO; }
 
   /* ---------- ver la contraseña ---------- */
@@ -1406,6 +1458,7 @@ import {
     if (!puedeBorrarMovs() && modoSel) { modoSel = false; elegidos = {}; }
     $('b-borrar-todo').hidden = !(puedeBorrarMovs() && puedeBorrarPers());
     $('b-permisos').hidden = !esAdmin();
+    $('b-papelera').hidden = !puedeUsarPapelera();
     var miP = permisoDe(datos.sesion);
     $('b-clave').hidden = !datos.sesion || !miP;
     $('b-salir').hidden = !datos.sesion;
@@ -1709,6 +1762,7 @@ import {
   function comoEntro() {
     var partes = [];
     if (esAdmin()) partes.push('administra');
+    if (puedeUsarPapelera() && !esAdmin()) partes.push('papelera');
     if (puedeEditarPers()) partes.push('edita personas');
     if (puedeBorrarMovs()) partes.push('borra movimientos');
     if (puedeBorrarPers()) partes.push('borra personas');
@@ -2030,6 +2084,155 @@ import {
           err.hidden = false;
         });
     };
+  }
+
+  /* ---------- papelera ---------- */
+
+  /**
+   * Lo borrado se guarda aquí en vez de desaparecer. Se lee solo cuando se
+   * abre esta pantalla, para no gastar lecturas en algo que casi nunca se mira.
+   */
+  function formPapelera() {
+    panel.innerHTML = '';
+    if (!puedeUsarPapelera()) {
+      panel2.innerHTML = '<div class="hoja"><h3>Papelera</h3>' +
+        '<p class="pista" style="margin:0">Tu correo no tiene permiso para abrir la papelera.</p>' +
+        '<div class="acciones"><button class="btn ghost" id="f-no">Cerrar</button></div></div>';
+      $('f-no').onclick = cerrar;
+      return;
+    }
+    panel2.innerHTML = '<div class="hoja"><h3>Papelera</h3>' +
+      '<p class="pista" style="margin:0">Buscando lo que se ha borrado…</p></div>';
+
+    getDocs(collection(db, COL_PAPELERA))
+      .then(function (instantanea) {
+        var filas = [];
+        instantanea.forEach(function (d) { var f = d.data(); f.llave = d.id; filas.push(f); });
+        filas.sort(function (a, b) { return (b.borradoEn || 0) - (a.borradoEn || 0); });
+        pintarPapelera(filas);
+      })
+      .catch(function (err) {
+        panel2.innerHTML = '<div class="hoja"><h3>Papelera</h3>' +
+          '<p class="error">' + esc(mensajeError(err)) + '</p>' +
+          '<div class="acciones"><button class="btn ghost" id="f-no">Cerrar</button></div></div>';
+        $('f-no').onclick = cerrar;
+      });
+  }
+
+  var marcadosPapelera = {};
+
+  function pintarPapelera(filas) {
+    Object.keys(marcadosPapelera).forEach(function (k) {
+      if (!filas.some(function (f) { return f.llave === k; })) delete marcadosPapelera[k];
+    });
+    var cuantos = Object.keys(marcadosPapelera).length;
+
+    var cuerpo = filas.length
+      ? '<div class="lista-pers">' + filas.map(function (f) {
+          var d = f.datos || {};
+          var texto = (f.clase === 'mov')
+            ? fechaCorta(d.fecha) + ' · ' + esc(d.de) + ' → ' + esc(d.a) + ' · ' + plata(d.monto) +
+              (d.nota ? ' · ' + esc(d.nota) : '')
+            : 'Persona: ' + esc(d.nombre);
+          var marcado = !!marcadosPapelera[f.llave];
+          return '<div class="fila' + (marcado ? ' elegida' : '') + '">' +
+                   '<label><input type="checkbox" data-marca="' + esc(f.llave) + '"' + (marcado ? ' checked' : '') + '>' +
+                     '<span class="pers-dato"><span class="pers-nombre" style="font-size:13.5px;font-weight:500">' +
+                       texto + '</span>' +
+                       '<span class="llave" style="display:block;margin-top:2px">borrado ' + hace(f.borradoEn || 0) +
+                       (f.borradoPor ? ' por ' + esc(f.borradoPor) : '') + '</span></span>' +
+                   '</label>' +
+                   '<button class="btn ghost mini" data-restaurar="' + esc(f.llave) + '">Restaurar</button>' +
+                 '</div>';
+        }).join('') + '</div>'
+      : '<p class="pista" style="margin:0">La papelera está vacía.</p>';
+
+    var barra = filas.length
+      ? '<div class="barra-sel clara" style="margin-top:12px">' +
+          '<span>' + (cuantos ? cuantos + ' marcado' + (cuantos === 1 ? '' : 's') : 'Marca lo que quieras devolver') + '</span>' +
+          '<span class="grupo">' +
+            '<button class="btn mini" id="pa-todos">' + (cuantos === filas.length ? 'Quitar marcas' : 'Marcar todo') + '</button>' +
+            '<button class="btn mini" id="pa-restaurar"' + (cuantos ? '' : ' disabled') + '>Restaurar' + (cuantos ? ' ' + cuantos : '') + '</button>' +
+          '</span></div>'
+      : '';
+
+    panel2.innerHTML = '<div class="hoja"><h3>Papelera</h3>' +
+      '<p class="pista" style="margin:0 0 10px">Aquí queda lo que se borra, por si fue un error. ' +
+      'Restaurar lo devuelve tal como estaba, y los intereses se vuelven a calcular desde su fecha original.</p>' +
+      '<p class="error" id="err" hidden></p>' +
+      cuerpo + barra +
+      '<div class="acciones"><button class="btn ghost" id="f-no">Cerrar</button>' +
+      (filas.length ? '<button class="btn ghost peligro" id="f-vaciar">Vaciar la papelera</button>' : '') +
+      '</div></div>';
+
+    $('f-no').onclick = function () { marcadosPapelera = {}; cerrar(); };
+
+    Array.prototype.forEach.call(panel2.querySelectorAll('[data-marca]'), function (c) {
+      c.onchange = function () {
+        if (c.checked) marcadosPapelera[c.dataset.marca] = true;
+        else delete marcadosPapelera[c.dataset.marca];
+        pintarPapelera(filas);
+      };
+    });
+
+    if ($('pa-todos')) $('pa-todos').onclick = function () {
+      if (cuantos === filas.length) marcadosPapelera = {};
+      else filas.forEach(function (f) { marcadosPapelera[f.llave] = true; });
+      pintarPapelera(filas);
+    };
+
+    if ($('pa-restaurar')) $('pa-restaurar').onclick = function () {
+      var escogidas = filas.filter(function (f) { return marcadosPapelera[f.llave]; });
+      if (!escogidas.length) return;
+      restaurarVarias(escogidas);
+    };
+
+    Array.prototype.forEach.call(panel2.querySelectorAll('[data-restaurar]'), function (b) {
+      b.onclick = function () {
+        var f = filas.filter(function (x) { return x.llave === b.dataset.restaurar; })[0];
+        if (f) restaurarVarias([f]);
+      };
+    });
+
+    if ($('f-vaciar')) $('f-vaciar').onclick = function () {
+      if (!confirm('Esto elimina definitivamente ' + filas.length + ' registro' +
+                   (filas.length === 1 ? '' : 's') + '. No se podrán recuperar. ¿Seguir?')) return;
+      Promise.all(filas.map(function (f) {
+        return deleteDoc(doc(db, COL_PAPELERA, f.llave));
+      })).then(formPapelera).catch(function (e) {
+        var err = $('err'); err.textContent = mensajeError(e); err.hidden = false;
+      });
+    };
+  }
+
+  /**
+   * Devuelve varios de una vez. Las personas van primero: si se restaura un
+   * movimiento cuya persona también estaba borrada, ella tiene que existir antes.
+   */
+  function restaurarVarias(lista) {
+    var orden = lista.slice().sort(function (a, b) {
+      return (a.clase === 'persona' ? 0 : 1) - (b.clase === 'persona' ? 0 : 1);
+    });
+    var personas = orden.filter(function (f) { return f.clase === 'persona'; });
+    var movs = orden.filter(function (f) { return f.clase !== 'persona'; });
+
+    return Promise.all(personas.map(restaurar))
+      .then(function () { return Promise.all(movs.map(restaurar)); })
+      .then(function () { marcadosPapelera = {}; formPapelera(); });
+  }
+
+  function restaurar(f) {
+    var d = f.datos || {};
+    var destino = (f.clase === 'mov') ? COL_MOVS : COL_PERS;
+    var id = (f.clase === 'mov') ? String(d.id) : (normCorreo(d.correo) || d.nombre);
+    d.borrado = false;
+    d.actualizado = Date.now();
+    return setDoc(doc(db, destino, id), d)
+      .then(function () { return deleteDoc(doc(db, COL_PAPELERA, f.llave)); })
+      .catch(function (e) {
+        var err = $('err');
+        if (err) { err.textContent = mensajeError(e); err.hidden = false; }
+      });
   }
 
   /* ---------- exportar a una hoja ---------- */
@@ -2360,31 +2563,18 @@ import {
     var yo = veTodo() ? null : miPersona();
     var lado = '';
 
-    if (yo) {
-      // Quien solo ve lo suyo únicamente puede registrar movimientos en los que participa.
-      var otras = gente.filter(function (p) { return p.nombre !== yo; });
-      lado =
-        '<div class="campo"><label>Quién entrega la plata y quién la recibe</label>' +
-        '<div class="par">' +
-          '<select id="f-de" aria-label="Quién entrega">' +
-            '<option value="__yo">' + esc(yo) + ' (tú)</option>' +
-            '<option value="__otro">la otra persona</option>' +
-          '</select>' +
-          '<span class="flechita">→</span>' +
-          '<select id="f-a" aria-label="La otra persona">' +
-            otras.map(function (p) { return '<option value="' + esc(p.nombre) + '">' + esc(p.nombre) + '</option>'; }).join('') +
-          '</select>' +
-        '</div>' +
-        '<p class="pista" id="f-frase"></p></div>';
-    } else {
-      lado =
-        '<div class="campo"><label>Quién entrega la plata y quién la recibe</label>' +
-        '<div class="par">' +
-          '<select id="f-de" aria-label="Quién entrega">' + ops(elegida) + '</select>' +
-          '<span class="flechita">→</span>' +
-          '<select id="f-a" aria-label="Quién recibe">' + ops(gente[1].nombre) + '</select>' +
-        '</div></div>';
-    }
+    // Los dos desplegables muestran siempre nombres reales. Antes, para quien
+    // veía solo lo suyo, el segundo cambiaba de significado según el primero
+    // y se prestaba a confusión.
+    lado =
+      '<div class="campo"><label>Quién entrega la plata y quién la recibe</label>' +
+      '<div class="par">' +
+        '<select id="f-de" aria-label="Quién entrega">' + ops(elegida) + '</select>' +
+        '<span class="flechita">→</span>' +
+        '<select id="f-a" aria-label="Quién recibe">' + ops(gente[1].nombre) + '</select>' +
+      '</div>' +
+      (yo ? '<p class="pista">Tienes que aparecer tú en una de las dos casillas.</p>' : '') +
+      '<p class="pista" id="f-frase"></p></div>';
 
     panel.innerHTML =
       '<div class="hoja"><h3>Registrar movimiento</h3>' +
@@ -2404,16 +2594,10 @@ import {
       '<button class="btn ghost" id="f-no">Cancelar</button></div></div>';
 
     var inMonto = $('f-monto'), selDe = $('f-de'), selA = $('f-a');
-    if (!yo && selDe.value === selA.value) selA.selectedIndex = selDe.selectedIndex === 0 ? 1 : 0;
+    if (selDe.value === selA.value) selA.selectedIndex = selDe.selectedIndex === 0 ? 1 : 0;
     inMonto.focus();
 
-    /** Con la vista restringida, los dos selects se traducen a un par de nombres reales. */
-    function ladosReales() {
-      if (!yo) return { de: selDe.value, a: selA.value };
-      return selDe.value === '__yo'
-        ? { de: yo, a: selA.value }
-        : { de: selA.value, a: yo };
-    }
+    function ladosReales() { return { de: selDe.value, a: selA.value }; }
 
     function tipoElegido() {
       var r = document.querySelector('input[name=tipo]:checked');
@@ -2583,13 +2767,8 @@ import {
     });
     // Si vino desde el botón Abonar, se deja todo listo y solo falta el monto.
     if (puesto) {
-      if (yo) {
-        selDe.value = (puesto.de === yo) ? '__yo' : '__otro';
-        selA.value = (puesto.de === yo) ? puesto.a : puesto.de;
-      } else {
-        selDe.value = puesto.de;
-        selA.value = puesto.a;
-      }
+      selDe.value = puesto.de;
+      selA.value = puesto.a;
       var radio = panel.querySelector('input[name=tipo][value="' + (puesto.tipo || 'prestamo') + '"]');
       if (radio) radio.checked = true;
     }
@@ -2649,6 +2828,7 @@ import {
   $('b-nuevo').onclick = formMov;
   $('b-persona').onclick = formPersonas;
   $('b-exportar').onclick = formExportar;
+  $('b-papelera').onclick = formPapelera;
   $('b-permisos').onclick = formPermisos;
   $('b-clave').onclick = function () { formClave(datos.sesion); };
   $('b-salir').onclick = pedirCierreSesion;
