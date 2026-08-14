@@ -6,7 +6,7 @@
  * en aparecer.
  */
 
-var CACHE = 'cuentas-2026-08-13-c';
+var CACHE = 'cuentas-2026.08.13-D';
 var BASE = new URL('./', self.location).pathname;
 
 var ARCHIVOS = [
