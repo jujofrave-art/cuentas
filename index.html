@@ -85,6 +85,15 @@ html,body{margin:0;background:var(--paper)}
 .deuda .deudor{font-weight:600}
 .deuda .rel{color:var(--ink-soft);font-size:12px;display:block;margin-top:1px}
 .deuda .dequé{font-size:11px;opacity:.85}
+.deuda{padding:0}
+.deuda .cuerpo{
+  background:none;border:0;padding:11px 14px;flex:1;display:flex;align-items:center;
+  justify-content:space-between;gap:12px;text-align:left;color:inherit;font:inherit;min-width:0;
+}
+.deuda .abonar{margin:0 12px 0 0;flex:none}
+.rel-fila{display:flex;align-items:stretch;gap:8px}
+.rel-fila .rel{flex:1}
+.rel-fila .abonar{flex:none;align-self:center}
 .deuda .cuanto{font-family:var(--mono);font-variant-numeric:tabular-nums;font-weight:500;color:var(--debe);white-space:nowrap}
 
 /* ---------- personas ---------- */
@@ -346,6 +355,13 @@ mark{background:#F4E7A8;color:inherit;padding:0 1px}
 .lista-pers .fila{display:flex;justify-content:space-between;align-items:center;gap:10px;padding:8px 0;border-bottom:1px solid var(--rule-soft);font-size:14px}
 .lista-pers .fila.elegida{background:#EFF5EC;box-shadow:inset 3px 0 0 var(--ink)}
 .lista-pers .fila > label{display:flex;align-items:center;gap:9px;flex:1;min-width:0;cursor:pointer;padding-left:6px}
+.lista-pers .fila{padding:10px 0}
+.pers-dato{padding-left:6px;min-width:0}
+.pers-nombre{font-size:15px;font-weight:600;letter-spacing:-.01em;display:block}
+.pers-falta{
+  display:block;font-family:var(--mono);font-size:9.5px;letter-spacing:.09em;
+  text-transform:uppercase;color:var(--debe);margin-top:2px;
+}
 .lista-pers .quitar{background:none;border:0;color:var(--ink-soft);font-size:15px;padding:2px 6px;opacity:.6}
 .lista-pers .quitar:hover{opacity:1;color:var(--debe)}
 
@@ -490,7 +506,7 @@ import {
     appId: '1:754021039496:web:4ddf05feec8d2dac1ece3d'
   };
 
-  var VERSION = 'firebase-2026.08.14-D';
+  var VERSION = 'firebase-2026.08.14-F';
   var DUENO = 'jujofrave@gmail.com';
 
   var TIPOS = {
@@ -1296,14 +1312,18 @@ import {
         ? 'préstamo del ' + fechaCorta(d.fecha) + (d.nota ? ' · ' + esc(d.nota) : '') +
           (d.tasa ? ' · ' + esc(d.tasa) : '')
         : 'cuenta general, sin préstamo';
-      return '<button class="deuda" data-persona="' + esc(d.deudor) + '">' +
-               '<span class="quienes"><span class="deudor">' + esc(d.deudor) + '</span>' +
-               '<span class="rel">le debe a ' + esc(d.acreedor) + '</span>' +
-               '<span class="rel dequé">' + detalleTexto + '</span></span>' +
-               '<span class="cuanto">' + plata(d.monto) + '</span>' +
-             '</button>';
+      return '<div class="deuda">' +
+               '<button class="cuerpo" data-persona="' + esc(d.deudor) + '">' +
+                 '<span class="quienes"><span class="deudor">' + esc(d.deudor) + '</span>' +
+                 '<span class="rel">le debe a ' + esc(d.acreedor) + '</span>' +
+                 '<span class="rel dequé">' + detalleTexto + '</span></span>' +
+                 '<span class="cuanto">' + plata(d.monto) + '</span>' +
+               '</button>' +
+               botonAbonar(d) +
+             '</div>';
     }).join('');
-    enlazarFicha(cont, '.deuda');
+    enlazarFicha(cont, '.deuda .cuerpo');
+    enlazarAbonos(cont);
   }
 
   function pintarPersonas() {
@@ -1338,6 +1358,23 @@ import {
     return '<span class="linea-cifra">' +
            (etiqueta ? '<span class="et">' + etiqueta + '</span>' : '') +
            '<span class="saldo" data-lado="' + lado + '">' + plata(monto) + '</span></span>';
+  }
+
+  /** Botón para abonar directo a esa cuenta, sin armar el movimiento a mano. */
+  function botonAbonar(d) {
+    return '<button class="btn ghost mini abonar" data-abonar="' + esc(d.ref || '') +
+           '" data-de="' + esc(d.deudor) + '" data-a="' + esc(d.acreedor) + '">Abonar</button>';
+  }
+
+  function enlazarAbonos(cont) {
+    Array.prototype.forEach.call(cont.querySelectorAll('[data-abonar]'), function (b) {
+      b.onclick = function (ev) {
+        ev.stopPropagation();
+        cerrarFicha();
+        formMov({ de: b.dataset.de, a: b.dataset.a, tipo: 'pago', ref: b.dataset.abonar });
+        $('panel').scrollIntoView({ behavior: 'smooth', block: 'center' });
+      };
+    });
   }
 
   function enlazarFicha(cont, sel) {
@@ -1541,23 +1578,25 @@ import {
 
     var bloqueFavor = d.leDeben.length
       ? '<h4>Le deben a ' + esc(nombre) + '</h4><div class="rel-lista">' + d.leDeben.map(function (r) {
-          return '<button class="rel" data-persona="' + esc(r.quien) + '" data-lado="favor">' +
+          return '<div class="rel-fila"><button class="rel" data-persona="' + esc(r.quien) + '" data-lado="favor">' +
                  '<span><span class="quien2">' + esc(r.quien) + '</span>' +
                  '<span class="rel-txt">le debe a ' + esc(nombre) +
                  (r.ref ? ' · préstamo del ' + fechaCorta(r.fecha) + (r.nota ? ' (' + esc(r.nota) + ')' : '')
                         : ' · cuenta general') + '</span></span>' +
-                 '<span class="cifrita">' + plata(r.monto) + '</span></button>';
+                 '<span class="cifrita">' + plata(r.monto) + '</span></button>' +
+                 botonAbonar({ ref: r.ref, deudor: r.quien, acreedor: nombre }) + '</div>';
         }).join('') + '</div>'
       : '';
 
     var bloqueDebe = d.debeA.length
       ? '<h4>' + esc(nombre) + ' le debe a</h4><div class="rel-lista">' + d.debeA.map(function (r) {
-          return '<button class="rel" data-persona="' + esc(r.quien) + '" data-lado="debe">' +
+          return '<div class="rel-fila"><button class="rel" data-persona="' + esc(r.quien) + '" data-lado="debe">' +
                  '<span><span class="quien2">' + esc(r.quien) + '</span>' +
                  '<span class="rel-txt">' + esc(nombre) + ' le debe' +
                  (r.ref ? ' · préstamo del ' + fechaCorta(r.fecha) + (r.nota ? ' (' + esc(r.nota) + ')' : '')
                         : ' · cuenta general') + '</span></span>' +
-                 '<span class="cifrita">' + plata(r.monto) + '</span></button>';
+                 '<span class="cifrita">' + plata(r.monto) + '</span></button>' +
+                 botonAbonar({ ref: r.ref, deudor: nombre, acreedor: r.quien }) + '</div>';
         }).join('') + '</div>'
       : '';
 
@@ -1645,6 +1684,7 @@ import {
     Array.prototype.forEach.call($('ficha').querySelectorAll('.rel'), function (b) {
       b.onclick = function () { abrirFicha(b.dataset.persona); };
     });
+    enlazarAbonos($('ficha'));
     $('fi-nuevo').onclick = function () {
       cerrarFicha();
       formMov(nombre);
@@ -2058,12 +2098,12 @@ import {
     var filas = gente.map(function (p) {
       var n = esc(p.nombre);
       var marcada = !!elegidas[p.nombre];
-      var etiqueta = n + (p.correo
-        ? '<span class="llave" style="text-transform:none;letter-spacing:0;font-size:11px">' + esc(p.correo) + '</span>'
-        : '<span class="llave" style="color:var(--debe)">FALTA CORREO · NO VE SUS CUENTAS</span>');
+      // El correo no se muestra: se ve al editar. Solo se avisa si falta.
+      var etiqueta = '<span class="pers-nombre">' + n + '</span>' +
+        (p.correo ? '' : '<span class="pers-falta">falta el correo · no ve sus cuentas</span>');
       var izquierda = modoSelPers
         ? '<label><input type="checkbox" data-nombre="' + n + '"' + (marcada ? ' checked' : '') + '><span>' + etiqueta + '</span></label>'
-        : '<span style="padding-left:6px">' + etiqueta + '</span>';
+        : '<span class="pers-dato">' + etiqueta + '</span>';
       var derecha = '';
       if (!modoSelPers) {
         if (puedeEditarPers()) {
@@ -2290,7 +2330,12 @@ import {
     }).then(formPersonas);
   }
 
+  /**
+   * preDe puede ser un nombre, o un objeto {de, a, tipo, ref} para llegar
+   * con todo puesto desde el botón Abonar de una cuenta.
+   */
   function formMov(preDe) {
+    var puesto = (preDe && typeof preDe === 'object') ? preDe : null;
     panel2.innerHTML = '';
     var gente = personasVivas();
     if (gente.length < 2) {
@@ -2300,7 +2345,7 @@ import {
       return;
     }
 
-    var elegida = (typeof preDe === 'string' && preDe) ? preDe : (filtro || gente[0].nombre);
+    var elegida = puesto ? puesto.de : ((typeof preDe === 'string' && preDe) ? preDe : (filtro || gente[0].nombre));
     var ops = function (sel) {
       return gente.map(function (p) {
         return '<option value="' + esc(p.nombre) + '"' + (p.nombre === sel ? ' selected' : '') + '>' + esc(p.nombre) + '</option>';
@@ -2536,7 +2581,26 @@ import {
     Array.prototype.forEach.call(panel.querySelectorAll('input[name=tipo]'), function (r) {
       r.onchange = refrescar;
     });
+    // Si vino desde el botón Abonar, se deja todo listo y solo falta el monto.
+    if (puesto) {
+      if (yo) {
+        selDe.value = (puesto.de === yo) ? '__yo' : '__otro';
+        selA.value = (puesto.de === yo) ? puesto.a : puesto.de;
+      } else {
+        selDe.value = puesto.de;
+        selA.value = puesto.a;
+      }
+      var radio = panel.querySelector('input[name=tipo][value="' + (puesto.tipo || 'prestamo') + '"]');
+      if (radio) radio.checked = true;
+    }
+
     refrescar();
+
+    if (puesto && puesto.ref && $('f-ref')) {
+      $('f-ref').value = String(puesto.ref);
+      previo();
+    }
+    if (puesto) inMonto.focus();
 
     $('f-no').onclick = cerrar;
     $('f-ok').onclick = function () {
