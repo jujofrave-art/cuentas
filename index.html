@@ -489,7 +489,7 @@ import {
     appId: '1:754021039496:web:4ddf05feec8d2dac1ece3d'
   };
 
-  var VERSION = 'firebase-2026.08.14-A';
+  var VERSION = 'firebase-2026.08.14-B';
   var DUENO = 'jujofrave@gmail.com';
 
   var TIPOS = {
@@ -1800,9 +1800,11 @@ import {
         'placeholder="tucorreo@gmail.com" value="' + esc(ultimoCorreo || '') + '"></div>' +
         '<div class="campo"><label for="pu-clave">Contraseña</label>' +
         '<input type="password" id="pu-clave" autocomplete="current-password" placeholder="••••••••"></div>' +
-        '<div class="acciones"><button class="btn" id="pu-entrar">Entrar</button></div>' +
-        '<p class="aviso">' +
-          '<button class="btn ghost mini" id="pu-crear">Es mi primera vez, crear contraseña</button> ' +
+        '<div class="acciones">' +
+          '<button class="btn" id="pu-entrar">Entrar</button>' +
+          '<button class="btn ghost" id="pu-crear">Crear cuenta</button>' +
+        '</div>' +
+        '<p class="aviso" style="border:0;padding-top:6px;margin-top:10px">' +
           '<button class="btn ghost mini" id="pu-olvide">Olvidé mi contraseña</button>' +
         '</p>' +
         '<p class="aviso">Solo entran los correos autorizados. Si el tuyo no está, ' +
@@ -1845,7 +1847,18 @@ import {
       if (!cClave.value) { avisar('Escribe tu contraseña.'); return; }
       ocupado('Entrando…');
       signInWithEmailAndPassword(auth, c, cClave.value)
-        .catch(function (err) { avisar(mensajeError(err)); });
+        .catch(function (err) {
+          var codigo = String(err && err.code || '');
+          if (codigo.indexOf('invalid-credential') > -1 || codigo.indexOf('user-not-found') > -1) {
+            avisar('No pudimos entrar con esos datos. Si es la primera vez que usas la app en este ' +
+                   'correo, toca «Crear cuenta». Si ya la tenías, revisa la contraseña.');
+            var b = $('pu-crear');
+            b.style.borderColor = 'var(--haber)';
+            b.style.color = 'var(--haber)';
+            return;
+          }
+          avisar(mensajeError(err));
+        });
     };
 
     $('pu-crear').onclick = function () {
@@ -1856,6 +1869,8 @@ import {
         avisar('Escribe la contraseña que quieres, de al menos 6 caracteres, y vuelve a tocar este botón.');
         return;
       }
+      if (!confirm('Se va a crear la cuenta de ' + c + ' con la contraseña que escribiste.\n\n' +
+                   'Si ya tenías cuenta, cancela y usa Entrar.')) return;
       ocupado('Creando…');
       createUserWithEmailAndPassword(auth, c, cClave.value)
         .catch(function (err) { avisar(mensajeError(err)); });
