@@ -6,7 +6,7 @@
  * en aparecer.
  */
 
-var CACHE = 'cuentas-2026.08.13-E';
+var CACHE = 'cuentas-firebase-2026.08.14-A';
 var BASE = new URL('./', self.location).pathname;
 
 var ARCHIVOS = [
@@ -50,11 +50,17 @@ function guardar(req, resp) {
 self.addEventListener('fetch', function (e) {
   var req = e.request;
 
-  // La sincronización con la hoja nunca se guarda en caché.
+  // Las escrituras nunca se guardan en caché.
   if (req.method !== 'GET') return;
-  if (req.url.indexOf('script.google.com') > -1 || req.url.indexOf('script.googleusercontent.com') > -1) return;
+  // Las tipografías sí se guardan; el tráfico de Firebase nunca.
+  var esTipografia = req.url.indexOf('fonts.googleapis.com') > -1 ||
+                     req.url.indexOf('fonts.gstatic.com') > -1 ||
+                     req.url.indexOf('www.gstatic.com/firebasejs') > -1;
 
-  var esTipografia = req.url.indexOf('fonts.googleapis.com') > -1 || req.url.indexOf('fonts.gstatic.com') > -1;
+  if (!esTipografia && (req.url.indexOf('googleapis.com') > -1 ||
+                        req.url.indexOf('firebaseio.com') > -1 ||
+                        req.url.indexOf('firebaseapp.com') > -1)) return;
+
   var mismoOrigen = new URL(req.url).origin === self.location.origin;
   if (!mismoOrigen && !esTipografia) return;
 
