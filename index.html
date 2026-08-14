@@ -2710,13 +2710,34 @@ mark{background:#F4E7A8;color:inherit;padding:0 1px}
   $('b-salir').onclick = pedirCierreSesion;
 
   $('b-version').onclick = function () {
-    var sw = ('serviceWorker' in navigator) ? 'sí' : 'no';
-    alert('Versión instalada: 2026.08.13-C\n\n' +
-      'Fechas futuras bloqueadas: sí\n' +
-      'Espera a la hoja: 45 segundos\n' +
-      'Intereses en pesos por período cumplido: sí\n' +
-      'Copia sin señal activa: ' + sw + '\n\n' +
-      'Si esta pantalla no aparece, estás en una versión anterior.');
+    var lineas = ['Versión de la app: 2026.08.13-C', ''];
+
+    if (!('serviceWorker' in navigator) || !navigator.serviceWorker.controller) {
+      lineas.push('Copia sin señal: no instalada todavía.');
+      lineas.push('Abre la app una segunda vez para que quede.');
+      alert(lineas.join('\n'));
+      return;
+    }
+
+    // Se le pregunta a la caché cuál versión guardó, que es lo que de verdad
+    // decide si las actualizaciones van a llegar solas.
+    caches.keys().then(function (llaves) {
+      var mia = llaves.filter(function (k) { return k.indexOf('cuentas') === 0; })[0] || '(ninguna)';
+      lineas.push('Copia guardada: ' + mia);
+      lineas.push('');
+      if (mia.indexOf('2026-08-13-c') > -1) {
+        lineas.push('Actualización automática: ACTIVA.');
+        lineas.push('De aquí en adelante, al abrir la app con internet');
+        lineas.push('siempre vas a ver la última versión.');
+      } else {
+        lineas.push('Actualización automática: NO.');
+        lineas.push('Toca desinstalar la app, borrar los datos del sitio');
+        lineas.push('y volver a entrar. Es la última vez que hay que hacerlo.');
+      }
+      alert(lineas.join('\n'));
+    }).catch(function () {
+      alert(lineas.join('\n') + '\nNo se pudo leer la copia guardada.');
+    });
   };
 
   $('b-sel').onclick = function () {
