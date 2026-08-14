@@ -1326,7 +1326,7 @@ import {
     $('b-clave').hidden = !datos.sesion || !miP;
     $('b-salir').hidden = !datos.sesion;
     $('quien-soy').innerHTML = datos.sesion
-      ? 'Entraste como <b>' + esc(datos.sesion) + '</b>' + esc(comoEntro()) +
+      ? 'Entraste como <b>' + esc(datos.sesion) + '</b>' + esc(comoEntro())
       : '';
     $('titulo-movs').textContent = (filtro || busqueda)
       ? lista.length + ' de ' + total + ' movimientos'
