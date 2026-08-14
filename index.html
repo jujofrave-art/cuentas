@@ -699,6 +699,11 @@ import {
       'auth/invalid-email': 'Ese correo no parece válido.',
       'auth/too-many-requests': 'Demasiados intentos. Espera un momento.',
       'auth/network-request-failed': 'Sin conexión. Inténtalo cuando vuelva la señal.',
+      'auth/operation-not-allowed': 'Falta activar Correo/contraseña en Firebase → Authentication → Sign-in method.',
+      'auth/missing-password': 'Escribe una contraseña.',
+      'auth/invalid-login-credentials': 'Correo o contraseña incorrectos.',
+      'auth/user-disabled': 'Esa cuenta está deshabilitada en Firebase.',
+      'auth/requires-recent-login': 'Por seguridad, vuelve a entrar antes de cambiar la contraseña.',
       'permission-denied': 'Tu correo no tiene permiso para eso.',
       'unavailable': 'Sin conexión con la nube. Lo que registres se sube después.'
     };
@@ -1817,38 +1822,52 @@ import {
       b.textContent = texto || 'Entrar';
     }
 
+    /** Avisa sin repintar la puerta: si repintara, se borraría lo ya escrito. */
+    function avisar(texto, tono) {
+      ocupado('');
+      var p = $('pu-msg');
+      if (!p) {
+        p = document.createElement('p');
+        p.id = 'pu-msg';
+        var sub = caja.querySelector('.sub');
+        sub.parentNode.insertBefore(p, sub.nextSibling);
+      }
+      p.className = (tono === 'aviso') ? 'pista' : 'error';
+      p.textContent = texto;
+    }
+
     $('pu-entrar').onclick = function () {
       var c = normCorreo(cCorreo.value);
       ultimoCorreo = c;
-      if (!c) { pintarPuerta('Escribe tu correo.'); return; }
-      if (!cClave.value) { pintarPuerta('Escribe tu contraseña.'); return; }
+      if (!c) { avisar('Escribe tu correo.'); return; }
+      if (!cClave.value) { avisar('Escribe tu contraseña.'); return; }
       ocupado('Entrando…');
       signInWithEmailAndPassword(auth, c, cClave.value)
-        .catch(function (err) { pintarPuerta(mensajeError(err)); });
+        .catch(function (err) { avisar(mensajeError(err)); });
     };
 
     $('pu-crear').onclick = function () {
       var c = normCorreo(cCorreo.value);
       ultimoCorreo = c;
-      if (!c) { pintarPuerta('Escribe primero tu correo.'); return; }
+      if (!c) { avisar('Escribe primero tu correo.'); return; }
       if (cClave.value.length < 6) {
-        pintarPuerta('Escribe la contraseña que quieres, de al menos 6 caracteres, y vuelve a tocar este botón.');
+        avisar('Escribe la contraseña que quieres, de al menos 6 caracteres, y vuelve a tocar este botón.');
         return;
       }
       ocupado('Creando…');
       createUserWithEmailAndPassword(auth, c, cClave.value)
-        .catch(function (err) { pintarPuerta(mensajeError(err)); });
+        .catch(function (err) { avisar(mensajeError(err)); });
     };
 
     $('pu-olvide').onclick = function () {
       var c = normCorreo(cCorreo.value);
       ultimoCorreo = c;
-      if (!c) { pintarPuerta('Escribe tu correo para mandarte el enlace.'); return; }
+      if (!c) { avisar('Escribe tu correo para mandarte el enlace.'); return; }
       sendPasswordResetEmail(auth, c)
         .then(function () {
-          pintarPuerta('Te mandamos un enlace a ' + c + ' para cambiar la contraseña. Revisa también el correo no deseado.', 'aviso');
+          avisar('Te mandamos un enlace a ' + c + '. Revisa también el correo no deseado.', 'aviso');
         })
-        .catch(function (err) { pintarPuerta(mensajeError(err)); });
+        .catch(function (err) { avisar(mensajeError(err)); });
     };
   }
 
