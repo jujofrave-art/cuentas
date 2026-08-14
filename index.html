@@ -84,6 +84,7 @@ html,body{margin:0;background:var(--paper)}
 .deuda .quienes{min-width:0}
 .deuda .deudor{font-weight:600}
 .deuda .rel{color:var(--ink-soft);font-size:12px;display:block;margin-top:1px}
+.deuda .dequé{font-size:11px;opacity:.85}
 .deuda .cuanto{font-family:var(--mono);font-variant-numeric:tabular-nums;font-weight:500;color:var(--debe);white-space:nowrap}
 
 /* ---------- personas ---------- */
@@ -386,7 +387,7 @@ textarea.tsv{
   </section>
 
   <section class="bloque">
-    <h2>Quién le debe a quién</h2>
+    <h2>Cuentas abiertas</h2>
     <div class="deudas" id="deudas"></div>
   </section>
 
@@ -489,7 +490,7 @@ import {
     appId: '1:754021039496:web:4ddf05feec8d2dac1ece3d'
   };
 
-  var VERSION = 'firebase-2026.08.14-C';
+  var VERSION = 'firebase-2026.08.14-D';
   var DUENO = 'jujofrave@gmail.com';
 
   var TIPOS = {
@@ -807,19 +808,42 @@ import {
     return neto + interesEntre(x, y) - interesEntre(y, x);
   }
 
+  /**
+   * Cada préstamo es una cuenta aparte, aunque sean las mismas dos personas.
+   * Lo que no pertenece a ningún préstamo —abonos sin asignar, plata suelta—
+   * se agrupa por pareja en una "cuenta general".
+   */
   function deudas() {
-    var nombres = nombresConocidos();
     var salida = [];
+
+    // 1) Un renglón por préstamo con saldo
+    movsVivos().filter(esPrestamo).forEach(function (l) {
+      var e = estadoPrestamo(l);
+      if (cero(e.total)) return;
+      salida.push({
+        acreedor: l.de, deudor: l.a, monto: e.total,
+        ref: String(l.id), fecha: l.fecha, nota: l.nota || '',
+        tasa: tasaTexto(l)
+      });
+    });
+
+    // 2) Lo que sobra por pareja, que no cuelga de ningún préstamo
+    var nombres = nombresConocidos();
     for (var i = 0; i < nombres.length; i++) {
       for (var j = i + 1; j < nombres.length; j++) {
-        var v = deudaEntre(nombres[i], nombres[j]);
-        if (cero(v)) continue;
-        salida.push(v > 0
-          ? { acreedor: nombres[i], deudor: nombres[j], monto: v }
-          : { acreedor: nombres[j], deudor: nombres[i], monto: -v });
+        var a = nombres[i], b = nombres[j];
+        var neto = deudaEntre(a, b);
+        var enPrestamos = prestamosEntre(a, b).reduce(function (t, l) { return t + estadoPrestamo(l).total; }, 0)
+                        - prestamosEntre(b, a).reduce(function (t, l) { return t + estadoPrestamo(l).total; }, 0);
+        var suelto = neto - enPrestamos;
+        if (cero(suelto)) continue;
+        salida.push(suelto > 0
+          ? { acreedor: a, deudor: b, monto: suelto, ref: '', nota: 'cuenta general' }
+          : { acreedor: b, deudor: a, monto: -suelto, ref: '', nota: 'cuenta general' });
       }
     }
-    return salida.sort(function (a, b) { return b.monto - a.monto; });
+
+    return salida.sort(function (x, y) { return y.monto - x.monto; });
   }
 
   function saldoPersona(nombre) {
@@ -843,12 +867,11 @@ import {
    */
   function detalle(nombre) {
     var leDeben = [], debeA = [];
-    nombresConocidos().forEach(function (o) {
-      if (o === nombre) return;
-      var v = deudaEntre(nombre, o);
-      if (cero(v)) return;
-      if (v > 0) leDeben.push({ quien: o, monto: v });
-      else debeA.push({ quien: o, monto: -v });
+    // Se arma de las mismas cuentas separadas, para que la ficha y la lista
+    // principal digan siempre lo mismo.
+    deudas().forEach(function (d) {
+      if (d.acreedor === nombre) leDeben.push({ quien: d.deudor, monto: d.monto, ref: d.ref, nota: d.nota, fecha: d.fecha });
+      else if (d.deudor === nombre) debeA.push({ quien: d.acreedor, monto: d.monto, ref: d.ref, nota: d.nota, fecha: d.fecha });
     });
     var mayor = function (a, b) { return b.monto - a.monto; };
     leDeben.sort(mayor);
@@ -1265,13 +1288,18 @@ import {
 
     var lista = deudas();
     if (!lista.length) {
-      cont.innerHTML = '<div class="vacio">' + (movsVivos().length ? 'Todos están a paz y salvo.' : 'Aquí van a aparecer las deudas abiertas.') + '</div>';
+      cont.innerHTML = '<div class="vacio">' + (movsVivos().length ? 'Todos están a paz y salvo.' : 'Aquí van a aparecer las cuentas abiertas.') + '</div>';
       return;
     }
     cont.innerHTML = lista.map(function (d) {
+      var detalleTexto = d.ref
+        ? 'préstamo del ' + fechaCorta(d.fecha) + (d.nota ? ' · ' + esc(d.nota) : '') +
+          (d.tasa ? ' · ' + esc(d.tasa) : '')
+        : 'cuenta general, sin préstamo';
       return '<button class="deuda" data-persona="' + esc(d.deudor) + '">' +
                '<span class="quienes"><span class="deudor">' + esc(d.deudor) + '</span>' +
-               '<span class="rel">le debe a ' + esc(d.acreedor) + '</span></span>' +
+               '<span class="rel">le debe a ' + esc(d.acreedor) + '</span>' +
+               '<span class="rel dequé">' + detalleTexto + '</span></span>' +
                '<span class="cuanto">' + plata(d.monto) + '</span>' +
              '</button>';
     }).join('');
@@ -1515,7 +1543,9 @@ import {
       ? '<h4>Le deben a ' + esc(nombre) + '</h4><div class="rel-lista">' + d.leDeben.map(function (r) {
           return '<button class="rel" data-persona="' + esc(r.quien) + '" data-lado="favor">' +
                  '<span><span class="quien2">' + esc(r.quien) + '</span>' +
-                 '<span class="rel-txt">le debe a ' + esc(nombre) + '</span></span>' +
+                 '<span class="rel-txt">le debe a ' + esc(nombre) +
+                 (r.ref ? ' · préstamo del ' + fechaCorta(r.fecha) + (r.nota ? ' (' + esc(r.nota) + ')' : '')
+                        : ' · cuenta general') + '</span></span>' +
                  '<span class="cifrita">' + plata(r.monto) + '</span></button>';
         }).join('') + '</div>'
       : '';
@@ -1524,7 +1554,9 @@ import {
       ? '<h4>' + esc(nombre) + ' le debe a</h4><div class="rel-lista">' + d.debeA.map(function (r) {
           return '<button class="rel" data-persona="' + esc(r.quien) + '" data-lado="debe">' +
                  '<span><span class="quien2">' + esc(r.quien) + '</span>' +
-                 '<span class="rel-txt">' + esc(nombre) + ' le debe</span></span>' +
+                 '<span class="rel-txt">' + esc(nombre) + ' le debe' +
+                 (r.ref ? ' · préstamo del ' + fechaCorta(r.fecha) + (r.nota ? ' (' + esc(r.nota) + ')' : '')
+                        : ' · cuenta general') + '</span></span>' +
                  '<span class="cifrita">' + plata(r.monto) + '</span></button>';
         }).join('') + '</div>'
       : '';
