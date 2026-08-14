@@ -434,12 +434,12 @@ mark{background:#F4E7A8;color:inherit;padding:0 1px}
 
   var CLAVE = 'cuentas-familia-v3';
   var CLAVE_VIEJA = 'cuentas-papa-v2';
-  var VERSION = '2026.08.13-D';
+  var VERSION = '2026.08.13-E';
   var DUENO = 'jujofrave@gmail.com';
 
   // Pega aquí la dirección /exec una sola vez, antes de subir la app.
   // Así nadie más tiene que escribirla ni verla en pantalla.
-  var URL_HOJA = 'https://script.google.com/macros/s/AKfycbww2Mv8JwHtrx8e7Sj5uxIpaKavvprwqOVwavUVHgcsEdt_rhvuEb7cwi5OxsGGmWAd/exec';
+  var URL_HOJA = 'https://script.google.com/macros/s/AKfycbzrF1Yf0YSF6MGsixIsy_sWiFs0i7kgohlk153HdY7x7JgWqlF5cHRqWSS7TMQJXefj/exec';
 
   var TIPOS = {
     prestamo: { texto: 'Préstamo',      corto: 'Préstamo' },
@@ -1222,15 +1222,7 @@ mark{background:#F4E7A8;color:inherit;padding:0 1px}
     $('pu-entrar').disabled = true;
     $('pu-entrar').textContent = 'Entrando…';
 
-    // Un solo viaje: cada ida y vuelta a Apps Script cuesta más que las
-    // vueltas de cifrado que se ahorrarían partiéndolo en dos.
-    conTiempo(fetch(datos.url, {
-      method: 'POST',
-      headers: { 'Content-Type': 'text/plain;charset=utf-8' },
-      body: JSON.stringify({ accion: 'entrar', correo: correo, clave: clave }),
-      redirect: 'follow'
-    }))
-      .then(function (r) { return r.json(); })
+    hablarConLaHoja({ accion: 'entrar', correo: correo, clave: clave })
       .then(function (resp) {
         if (resp.error) {
           $('pu-entrar').disabled = false;
@@ -1360,16 +1352,7 @@ mark{background:#F4E7A8;color:inherit;padding:0 1px}
     datos.movs.forEach(function (m) { if (m.actualizado > datos.ultimoSync) envio.movs.push(m); });
     datos.permisos.forEach(function (p) { if (p.actualizado > datos.ultimoSync) envio.permisos.push(p); });
 
-    return conTiempo(fetch(datos.url, {
-      method: 'POST',
-      headers: { 'Content-Type': 'text/plain;charset=utf-8' },
-      body: JSON.stringify(envio),
-      redirect: 'follow'
-    }))
-      .then(function (r) {
-        if (!r.ok) throw new Error('La hoja respondió ' + r.status);
-        return r.json();
-      })
+    return hablarConLaHoja(envio)
       .then(function (resp) {
         if (resp.error) throw new Error(resp.error);
         fusionar(resp);
@@ -1403,6 +1386,42 @@ mark{background:#F4E7A8;color:inherit;padding:0 1px}
     if (!p) return;
     if (!p.hash) { datos.ficha = ''; return; }
     if (p.actualizado <= datos.ultimoSync) datos.ficha = fichaDe(p.hash, datos.sesion);
+  }
+
+  /**
+   * Habla con la hoja. Apps Script responde con un redireccionamiento, y a
+   * veces el navegador lo sigue convirtiendo el envío en una consulta simple;
+   * cuando eso pasa contesta doGet en vez de doPost. Se detecta y se reintenta.
+   */
+  function hablarConLaHoja(cuerpo) {
+    var intento = 0;
+
+    function enviar() {
+      intento++;
+      var url = datos.url + (datos.url.indexOf('?') > -1 ? '&' : '?') + 'n=' + Date.now() + '-' + intento;
+      return conTiempo(fetch(url, {
+        method: 'POST',
+        headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+        body: JSON.stringify(cuerpo),
+        redirect: 'follow',
+        cache: 'no-store'
+      }))
+        .then(function (r) {
+          if (!r.ok) throw new Error('La hoja respondió ' + r.status);
+          return r.json();
+        })
+        .then(function (resp) {
+          var seDegrado = resp && resp.error &&
+            (resp.error.indexOf('peticion-degradada') > -1 || resp.error.indexOf('Abre la app') > -1);
+          if (seDegrado) {
+            if (intento < 3) return enviar();
+            throw new Error('La hoja no recibió los cambios. Vuelve a darle a Sincronizar.');
+          }
+          return resp;
+        });
+    }
+
+    return enviar();
   }
 
   /** Si la hoja no contesta en 45 segundos, se corta: más vale un aviso que quedarse colgado. */
