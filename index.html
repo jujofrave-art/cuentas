@@ -489,7 +489,7 @@ import {
     appId: '1:754021039496:web:4ddf05feec8d2dac1ece3d'
   };
 
-  var VERSION = 'firebase-2026.08.14-B';
+  var VERSION = 'firebase-2026.08.14-C';
   var DUENO = 'jujofrave@gmail.com';
 
   var TIPOS = {
@@ -525,6 +525,7 @@ import {
   var COL_PERM = 'permisos';
 
   var escuchas = [];        // para soltar los oyentes al cerrar sesión
+  var miPermiso = null;     // el permiso propio, leído al entrar
   var listoPersonas = false, listoMovs = false, listoPermisos = false;
   var escribiendo = 0;      // cuántas escrituras van en camino
 
@@ -622,11 +623,12 @@ import {
       if (!mio || !mio.entrar) {
         datos.permisos = mio ? [mio] : [];
         listo = true;
-        pintarPuerta('El correo ' + correo + ' no tiene acceso a estas cuentas. ' +
-          'Pídele a quien administra que te agregue.');
+        pintar();
+        pintarPuerta();
         return;
       }
 
+      miPermiso = mio;
       datos.permisos = [mio];
       var admin = !!mio.admin;
 
@@ -642,7 +644,12 @@ import {
 
       if (admin) {
         escuchar(COL_PERM, false, function (filas) {
-          datos.permisos = filas;
+          // El propio nunca se pierde: si la lista llegara sin él, la app
+          // se expulsaría sola a la pantalla de "sin acceso".
+          var hayMio = filas.some(function (p) {
+            return normCorreo(p.correo) === normCorreo(datos.sesion);
+          });
+          datos.permisos = hayMio ? filas : filas.concat([miPermiso]);
           listoPermisos = true;
         });
       } else {
@@ -656,8 +663,11 @@ import {
 
   /* ---------- sesión ---------- */
 
-  function sesionValida() { return !!datos.sesion; }
+  /** Estar autenticado no basta: hace falta estar en la lista de permisos. */
+  function sesionValida() { return !!datos.sesion && puedeEntrar(datos.sesion); }
+  function hayCuenta() { return !!datos.sesion; }
   function puertaAbierta() { return !sesionValida(); }
+
 
   function cerrarSesion() {
     soltarEscuchas();
@@ -671,6 +681,7 @@ import {
   onAuthStateChanged(auth, function (usuario) {
     soltarEscuchas();
     if (!usuario) {
+      miPermiso = null;
       datos = { personas: [], movs: [], permisos: [], sesion: '' };
       listo = true;
       pintar();
@@ -1110,7 +1121,11 @@ import {
 
   function permisoDe(correo) {
     var c = normCorreo(correo);
-    return permisosVivos().filter(function (p) { return normCorreo(p.correo) === c; })[0] || null;
+    var p = permisosVivos().filter(function (x) { return normCorreo(x.correo) === c; })[0];
+    if (p) return p;
+    // Red de seguridad: el permiso propio se leyó al entrar y no depende de la lista.
+    if (miPermiso && normCorreo(miPermiso.correo) === c && !miPermiso.borrado) return miPermiso;
+    return null;
   }
 
   function puedeEntrar(correo) {
@@ -1779,14 +1794,31 @@ import {
       return;
     }
 
-    // Sesión abierta pero datos todavía cargando: pantalla de espera.
-    if (sesionValida() && !listo) {
+    // Hay cuenta de Firebase, pero todavía no sabemos si está autorizada.
+    if (hayCuenta() && !listo) {
       caja.innerHTML =
         '<div class="puerta"><div class="caja" style="text-align:center">' +
           '<h2>Cuentas claras</h2>' +
           '<p class="aviso" style="border:0">Cargando tus cuentas…</p>' +
         '</div></div>';
       document.body.style.overflow = 'hidden';
+      return;
+    }
+
+    // Cuenta creada pero sin permiso: entró a Firebase, no a las cuentas.
+    if (hayCuenta() && listo) {
+      caja.innerHTML =
+        '<div class="puerta"><div class="caja">' +
+          '<h2>Sin acceso</h2>' +
+          '<div class="sub">Cuentas claras</div>' +
+          '<p class="error">El correo <b>' + esc(datos.sesion) + '</b> no está autorizado ' +
+          'para ver estas cuentas.</p>' +
+          '<p class="aviso" style="border:0;padding:0">Tu cuenta quedó creada, pero hace falta que ' +
+          'quien administra la app te agregue en Permisos. Avísale y vuelve a entrar.</p>' +
+          '<div class="acciones"><button class="btn" id="pu-salir">Salir</button></div>' +
+        '</div></div>';
+      document.body.style.overflow = 'hidden';
+      $('pu-salir').onclick = cerrarSesion;
       return;
     }
 
