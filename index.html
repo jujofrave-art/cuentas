@@ -630,6 +630,8 @@ import {
 
       miPermiso = mio;
       datos.permisos = [mio];
+      migrarPermisos();
+      miPermiso = datos.permisos[0];
       var admin = !!mio.admin;
 
       escuchar(COL_PERS, false, function (filas) {
@@ -650,6 +652,7 @@ import {
             return normCorreo(p.correo) === normCorreo(datos.sesion);
           });
           datos.permisos = hayMio ? filas : filas.concat([miPermiso]);
+          migrarPermisos();   // acomoda permisos escritos a mano o de versiones viejas
           listoPermisos = true;
         });
       } else {
@@ -1104,12 +1107,6 @@ import {
     });
   }
 
-  /**
-   * Ya no hay que sembrar nada: el permiso del dueño se crea una sola vez en
-   * la consola de Firebase, y las reglas impiden que nadie lo borre o degrade.
-   * Solo se acomodan los permisos de versiones anteriores.
-   */
-  function asegurarDueno() { migrarPermisos(); }
 
   function permisosVivos() {
     return datos.permisos.filter(function (p) { return !p.borrado; })
