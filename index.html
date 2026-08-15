@@ -68,6 +68,12 @@ html,body{margin:0;background:var(--paper)}
 
 /* ---------- bloques ---------- */
 .bloque{padding:22px 20px 0}
+.titulo-acordeon{
+  display:flex;align-items:center;gap:8px;width:100%;background:none;border:0;padding:0;
+  font:inherit;color:inherit;text-align:left;letter-spacing:inherit;text-transform:inherit;
+}
+.titulo-acordeon .flecha{font-size:11px;opacity:.7}
+.resumen-sec{margin-left:auto;text-transform:none;letter-spacing:0;font-size:11px;opacity:.85}
 .bloque > h2{
   font-family:var(--mono);font-size:10.5px;font-weight:500;letter-spacing:.16em;
   text-transform:uppercase;color:var(--ink-soft);margin:0 0 10px;
@@ -438,18 +444,34 @@ textarea.tsv{
   </section>
 
   <section class="bloque">
-    <h2>Cuentas abiertas</h2>
-    <div class="deudas" id="deudas"></div>
+    <h2 id="t-deudas"></h2>
+    <div id="caja-deudas">
+      <div class="buscador">
+        <input type="search" id="buscar-deudas" placeholder="Buscar persona, préstamo o monto" autocomplete="off">
+        <button class="limpiar" id="limpiar-deudas" aria-label="Limpiar" hidden>×</button>
+      </div>
+      <div class="deudas" id="deudas"></div>
+    </div>
   </section>
 
   <section class="bloque">
-    <h2>Por persona</h2>
-    <div class="personas" id="personas"></div>
+    <h2 id="t-personas"></h2>
+    <div id="caja-personas">
+      <div class="buscador">
+        <input type="search" id="buscar-personas" placeholder="Buscar persona" autocomplete="off">
+        <button class="limpiar" id="limpiar-personas" aria-label="Limpiar" hidden>×</button>
+      </div>
+      <div class="personas" id="personas"></div>
+    </div>
   </section>
 
   <section class="bloque">
-    <h2><span id="titulo-movs">Movimientos</span>
-      <button class="btn ghost mini" id="b-sel">Seleccionar</button></h2>
+    <h2 id="t-movs"></h2>
+    <div id="caja-movs">
+    <div class="acciones" style="margin:0 0 10px">
+      <button class="btn ghost mini" id="b-sel">Seleccionar</button>
+      <span id="titulo-movs" style="display:none"></span>
+    </div>
     <div class="buscador">
       <input type="search" id="buscar" placeholder="Buscar por nombre, nota o monto" autocomplete="off">
       <button class="limpiar" id="b-limpiar" aria-label="Limpiar búsqueda" hidden>×</button>
@@ -458,6 +480,7 @@ textarea.tsv{
     <div id="resumen"></div>
     <div id="barra-sel"></div>
     <div id="movs"></div>
+    </div>
   </section>
 
   <section class="bloque">
@@ -542,7 +565,7 @@ import {
     appId: '1:754021039496:web:4ddf05feec8d2dac1ece3d'
   };
 
-  var VERSION = 'firebase-2026.08.15-G';
+  var VERSION = 'firebase-2026.08.15-I';
   var DUENO = 'jujofrave@gmail.com';
 
   var TIPOS = {
@@ -1429,9 +1452,44 @@ import {
   }
 
   var carpetasAbiertas = {};
+  var seccion = { deudas: true, personas: false, movs: false };
+  var busqDeudas = '', busqPersonas = '';
+
+  /** Busca en el texto de una cuenta: los dos nombres, la nota, la fecha y el monto. */
+  function cuentaCoincide(d, q) {
+    if (!q) return true;
+    var heno = sinTildes([d.deudor, d.a, d.acreedor, d.nota || '', d.fecha || '',
+      d.fecha ? fechaCorta(d.fecha) : '', d.tasa || '', String(Math.round(d.monto)),
+      plata(d.monto)].join(' '));
+    return heno.indexOf(sinTildes(q)) > -1;
+  }
+
+  /** Los tres títulos son acordeones: la pantalla arranca corta y uno abre lo que quiera. */
+  function pintarTitulo(id, texto, resumen, caja, llave) {
+    var abierta = seccion[llave];
+    $(id).innerHTML =
+      '<button class="titulo-acordeon" data-seccion="' + llave + '">' +
+        '<span class="flecha">' + (abierta ? '▾' : '▸') + '</span>' +
+        '<span>' + esc(texto) + '</span>' +
+        (resumen ? '<span class="resumen-sec">' + esc(resumen) + '</span>' : '') +
+      '</button>';
+    $(id).querySelector('[data-seccion]').onclick = function () {
+      seccion[llave] = !seccion[llave];
+      pintar();
+    };
+    if (caja) $(caja).hidden = !abierta;
+  }
 
   function pintarDeudas() {
     var cont = $('deudas');
+    var todas = (veTodo() || miPersona()) ? deudas() : [];
+    var quienes = {};
+    todas.forEach(function (d) { quienes[d.deudor] = true; });
+    pintarTitulo('t-deudas', 'Cuentas abiertas',
+      todas.length ? todas.length + ' cuentas · ' + Object.keys(quienes).length + ' personas · ' +
+        plata(todas.reduce(function (t, d) { return t + d.monto; }, 0)) : '',
+      'caja-deudas', 'deudas');
+    if (!seccion.deudas) return;
 
     if (!veTodo() && !miPersona()) {
       cont.innerHTML = '<div class="vacio">Tu correo todavía no está asociado a ninguna persona de la familia. ' +
@@ -1439,9 +1497,12 @@ import {
       return;
     }
 
-    var lista = deudas();
+    var lista = todas.filter(function (d) { return cuentaCoincide(d, busqDeudas); });
     if (!lista.length) {
-      cont.innerHTML = '<div class="vacio">' + (movsVivos().length ? 'Todos están a paz y salvo.' : 'Aquí van a aparecer las cuentas abiertas.') + '</div>';
+      cont.innerHTML = '<div class="vacio">' +
+        (busqDeudas ? 'Ninguna cuenta coincide con «' + esc(busqDeudas) + '».'
+                    : (movsVivos().length ? 'Todos están a paz y salvo.' : 'Aquí van a aparecer las cuentas abiertas.')) +
+        '</div>';
       return;
     }
 
@@ -1458,7 +1519,7 @@ import {
       .sort(function (a, b) { return b.total - a.total; });
 
     cont.innerHTML = orden.map(function (c) {
-      var abierta = !!carpetasAbiertas[c.deudor];
+      var abierta = !!carpetasAbiertas[c.deudor] || !!busqDeudas;
       var aQuienes = {};
       c.cuentas.forEach(function (d) { aQuienes[d.acreedor] = true; });
       var nombres = Object.keys(aQuienes);
@@ -1505,11 +1566,22 @@ import {
   function pintarPersonas() {
     var cont = $('personas');
     var lista = personasVisibles();
+    pintarTitulo('t-personas', 'Por persona',
+      lista.length ? lista.length + ' personas' : '', 'caja-personas', 'personas');
+    if (!seccion.personas) return;
     if (!lista.length) {
       cont.innerHTML = '<div class="vacio">Agrega a la familia para empezar a registrar préstamos.</div>';
       return;
     }
-    cont.innerHTML = lista.map(function (p) {
+    var visibles = lista.filter(function (p) {
+      return !busqPersonas || sinTildes(p.nombre).indexOf(sinTildes(busqPersonas)) > -1;
+    });
+    if (!visibles.length) {
+      cont.innerHTML = '<div class="vacio">Nadie coincide con «' + esc(busqPersonas) + '».</div>';
+      return;
+    }
+
+    cont.innerHTML = visibles.map(function (p) {
       var d = detalle(p.nombre);
       var lado = d.neto > 0 ? 'favor' : (d.neto < 0 ? 'debe' : 'cero');
       var cifras = '';
@@ -1579,7 +1651,6 @@ import {
   }
 
   var mesesAbiertos = null;   // null = todavía no se ha decidido cuál abrir
-  var movsAbiertos = false;   // la carpeta grande arranca plegada
 
   function nombreMes(iso) {
     var m = ['enero','febrero','marzo','abril','mayo','junio','julio',
@@ -1598,6 +1669,10 @@ import {
     });
 
     var total = movsVivos().length;
+    pintarTitulo('t-movs', 'Movimientos',
+      total ? total + (busqueda || filtro ? ' visibles' : ' en total') : '', 'caja-movs', 'movs');
+    if (!seccion.movs) return;
+
     $('b-sel').hidden = !total || !puedeBorrarMovs();
     if (!puedeBorrarMovs() && modoSel) { modoSel = false; elegidos = {}; }
     $('b-borrar-todo').hidden = !(puedeBorrarMovs() && puedeBorrarPers());
@@ -1659,9 +1734,6 @@ import {
         if (claves.length) mesesAbiertos[claves[0]] = true;
       }
 
-      var totalMovs = lista.length;
-      var totalPlata = lista.reduce(function (t, m) { return t + m.monto; }, 0);
-
       var interior = claves.map(function (k) {
         var abierto = !!mesesAbiertos[k];
         var suma = meses[k].reduce(function (t, m) { return t + m.monto; }, 0);
@@ -1676,26 +1748,7 @@ import {
         '</div>';
       }).join('');
 
-      // Una sola carpeta con todo adentro: con muchos meses, la lista de meses
-      // ya era larga por sí sola.
-      cont.innerHTML =
-        '<div class="carpeta grande' + (movsAbiertos ? ' abierta' : '') + '">' +
-          '<button class="carpeta-cab" data-todos="1">' +
-            '<span class="flecha">' + (movsAbiertos ? '▾' : '▸') + '</span>' +
-            '<span class="quienes"><span class="deudor">Todos los movimientos</span>' +
-              '<span class="sub">' + totalMovs + ' en ' + claves.length + ' mes' +
-              (claves.length === 1 ? '' : 'es') + '</span></span>' +
-            '<span class="cuanto" style="color:var(--ink-soft)">' + plata(totalPlata) + '</span>' +
-          '</button>' +
-          (movsAbiertos ? '<div class="carpeta-cuerpo">' + interior + '</div>' : '') +
-        '</div>';
-
-      $('deudas');
-      var botonTodos = cont.querySelector('[data-todos]');
-      if (botonTodos) botonTodos.onclick = function () {
-        movsAbiertos = !movsAbiertos;
-        pintarMovs();
-      };
+      cont.innerHTML = interior;
 
       Array.prototype.forEach.call(cont.querySelectorAll('[data-mes]'), function (b) {
         b.onclick = function () {
@@ -3397,6 +3450,26 @@ import {
     elegidos = {};
     this.textContent = 'Listo';
     pintarMovs();
+  };
+
+  $('buscar-deudas').oninput = function () {
+    busqDeudas = this.value.trim();
+    $('limpiar-deudas').hidden = !busqDeudas;
+    pintarDeudas();
+  };
+  $('limpiar-deudas').onclick = function () {
+    busqDeudas = ''; $('buscar-deudas').value = ''; this.hidden = true;
+    $('buscar-deudas').focus(); pintarDeudas();
+  };
+
+  $('buscar-personas').oninput = function () {
+    busqPersonas = this.value.trim();
+    $('limpiar-personas').hidden = !busqPersonas;
+    pintarPersonas();
+  };
+  $('limpiar-personas').onclick = function () {
+    busqPersonas = ''; $('buscar-personas').value = ''; this.hidden = true;
+    $('buscar-personas').focus(); pintarPersonas();
   };
 
   $('buscar').oninput = function () {
