@@ -307,6 +307,7 @@ html,body{margin:0;background:var(--paper)}
 .mov .monto{font-family:var(--mono);font-variant-numeric:tabular-nums;font-weight:500}
 .mov .monto[data-tipo="prestamo"]{color:var(--debe)}
 .mov .monto[data-tipo="pago"]{color:var(--haber)}
+.acciones-mov{display:flex;align-items:flex-start;gap:2px;justify-content:flex-end}
 .mov .borrar{background:none;border:0;color:var(--ink-soft);font-size:16px;line-height:1;padding:2px 4px;opacity:.5}
 .mov .borrar:hover{opacity:1;color:var(--debe)}
 .mov .pend{font-family:var(--mono);font-size:9px;letter-spacing:.1em;color:#8A6A1E}
@@ -529,7 +530,7 @@ import {
     appId: '1:754021039496:web:4ddf05feec8d2dac1ece3d'
   };
 
-  var VERSION = 'firebase-2026.08.15-B';
+  var VERSION = 'firebase-2026.08.15-C';
   var DUENO = 'jujofrave@gmail.com';
 
   var TIPOS = {
@@ -1559,10 +1560,10 @@ import {
       var ultima = modoSel
         ? '<span class="marca"><input type="checkbox" data-id="' + m.id + '"' + (elegidos[m.id] ? ' checked' : '') +
           ' aria-label="Seleccionar movimiento"></span>'
-        : ((puedeEditarMovs() ? '<button class="borrar" data-editar="' + m.id + '" aria-label="Corregir">✎</button>' : '') +
-           (puedeBorrarMovs()
-            ? '<button class="borrar" data-id="' + m.id + '" aria-label="Borrar movimiento">×</button>'
-            : ''));
+        : '<span class="acciones-mov">' +
+            (puedeEditarMovs() ? '<button class="borrar" data-editar="' + m.id + '" aria-label="Corregir">✎</button>' : '') +
+            (puedeBorrarMovs() ? '<button class="borrar" data-id="' + m.id + '" aria-label="Borrar movimiento">×</button>' : '') +
+          '</span>';
       return '<div class="mov' + (modoSel && elegidos[m.id] ? ' elegido' : '') + '" data-id="' + m.id + '">' +
                '<span class="fecha">' + fechaCorta(m.fecha) + '</span>' +
                '<span><span class="quien">' + resaltar(m.de) + '</span>' +
