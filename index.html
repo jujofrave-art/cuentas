@@ -118,6 +118,9 @@ html,body{margin:0;background:var(--paper)}
 
 .carpeta-cab .cuanto{font-family:var(--mono);font-variant-numeric:tabular-nums;font-weight:500;color:var(--debe);white-space:nowrap}
 .carpeta-cuerpo{border-top:1px solid var(--rule-soft);background:#F3F7F1}
+.fila-saldar{padding:0 14px 12px 34px;display:flex;gap:8px;flex-wrap:wrap}
+.fila-saldar:empty{display:none}
+.fila-saldar > button:only-child:empty{display:none}
 .carpeta-cuerpo .deuda{border:0;border-bottom:1px solid var(--rule-soft);border-left:0;padding-left:18px}
 .carpeta-cuerpo .movs{border:0}
 .carpeta.grande{border-left-color:var(--ink)}
@@ -565,7 +568,7 @@ import {
     appId: '1:754021039496:web:4ddf05feec8d2dac1ece3d'
   };
 
-  var VERSION = 'firebase-2026.08.15-I';
+  var VERSION = 'firebase-2026.08.15-K';
   var DUENO = 'jujofrave@gmail.com';
 
   var TIPOS = {
@@ -1177,9 +1180,16 @@ import {
       else if (e.abonado || e.interes) partes.push('quedan ' + plata(e.total));
       return partes.length ? ' · ' + partes.join(' · ') : '';
     }
-    if (!m.ref) return '';
+    var etiqueta = '';
+    if (m.grupo) {
+      var partes = movsVivos().filter(function (x) { return x.grupo === m.grupo; }).length;
+      etiqueta = (m.motivo === 'saldo')
+        ? ' · <b>saldó todo</b> el ' + fechaCorta(m.fecha) + (partes > 1 ? ' (' + partes + ' cuentas)' : '')
+        : ' · pago repartido del ' + fechaCorta(m.fecha) + (partes > 1 ? ' (' + partes + ' partes)' : '');
+    }
+    if (!m.ref) return etiqueta || '';
     var l = prestamoPorId(m.ref);
-    return l ? ' · abono al préstamo del ' + fechaCorta(l.fecha) : '';
+    return (l ? ' · abono al préstamo del ' + fechaCorta(l.fecha) : '') + etiqueta;
   }
 
 
@@ -1533,6 +1543,7 @@ import {
             '<span class="rel">' + esc(resumen) + '</span></span>' +
           '<span class="cuanto">' + plata(c.total) + '</span>' +
         '</button>' +
+        botonesSaldar(c) +
         (abierta ? '<div class="carpeta-cuerpo">' + c.cuentas.map(function (d) {
           var detalleTexto = d.ref
             ? 'préstamo del ' + fechaCorta(d.fecha) + (d.nota ? ' · ' + esc(d.nota) : '') +
@@ -1556,6 +1567,14 @@ import {
         var k = b.dataset.carpeta;
         if (carpetasAbiertas[k]) delete carpetasAbiertas[k]; else carpetasAbiertas[k] = true;
         pintarDeudas();
+      };
+    });
+
+    Array.prototype.forEach.call(cont.querySelectorAll('[data-saldar]'), function (b) {
+      b.onclick = function (ev) {
+        ev.stopPropagation();
+        formMov({ de: b.dataset.saldar, a: b.dataset.con, tipo: 'pago', ref: '__repartir', saldar: true });
+        $('panel').scrollIntoView({ behavior: 'smooth', block: 'center' });
       };
     });
 
@@ -1619,6 +1638,26 @@ import {
   }
 
   /** Botón para abonar directo a esa cuenta, sin armar el movimiento a mano. */
+  /**
+   * Saldar todo: una cuenta puede tener varios acreedores, así que sale un
+   * botón por cada uno, con el total exacto de ese momento ya calculado.
+   */
+  function botonesSaldar(c) {
+    var porAcreedor = {};
+    c.cuentas.forEach(function (d) {
+      porAcreedor[d.acreedor] = (porAcreedor[d.acreedor] || 0) + d.monto;
+    });
+    var nombres = Object.keys(porAcreedor);
+    if (!nombres.length) return '';
+
+    return '<div class="fila-saldar">' + nombres.map(function (ac) {
+      var cuantas = c.cuentas.filter(function (d) { return d.acreedor === ac; }).length;
+      if (cuantas < 2) return '';
+      return '<button class="btn ghost mini" data-saldar="' + esc(c.deudor) + '" data-con="' + esc(ac) + '">' +
+             'Saldar todo con ' + esc(ac) + ' · ' + plata(porAcreedor[ac]) + '</button>';
+    }).join('') + '</div>';
+  }
+
   function botonAbonar(d) {
     return '<button class="btn ghost mini abonar" data-abonar="' + esc(d.ref || '') +
            '" data-de="' + esc(d.deudor) + '" data-a="' + esc(d.acreedor) + '">Abonar</button>';
@@ -1781,10 +1820,25 @@ import {
 
     Array.prototype.forEach.call(cont.querySelectorAll('[data-id].borrar'), function (b) {
       b.onclick = function () {
-        if (!confirm('¿Borrar este movimiento? Se manda a la papelera.')) return;
+        var uno = movsVivos().filter(function (x) { return String(x.id) === b.dataset.id; })[0];
+        if (!uno) return;
+
+        // Un pago repartido se borra entero: dejar partes sueltas descuadraría
+        // las cuentas que ese pago cerró.
+        var hermanos = uno.grupo
+          ? movsVivos().filter(function (x) { return x.grupo === uno.grupo; })
+          : [uno];
+
+        var aviso = hermanos.length > 1
+          ? 'Este pago se repartió en ' + hermanos.length + ' cuentas. Se borran las ' +
+            hermanos.length + ' partes y esas deudas vuelven como estaban.\n\n¿Seguir?'
+          : '¿Borrar este movimiento? Se manda a la papelera.';
+        if (!confirm(aviso)) return;
+
+        var ids = hermanos.map(function (x) { return x.id; });
         registrar(function () {
           datos.movs.forEach(function (m) {
-            if (m.id === +b.dataset.id) { m.borrado = true; m.actualizado = Date.now(); }
+            if (ids.indexOf(m.id) > -1) { m.borrado = true; m.actualizado = Date.now(); }
           });
         });
       };
@@ -3317,6 +3371,14 @@ import {
 
     if (puesto && puesto.ref && $('f-ref')) {
       $('f-ref').value = String(puesto.ref);
+
+      // «Saldar todo» llega con el monto exacto de este momento ya puesto.
+      if (puesto.saldar) {
+        var deuda = prestamosEntre(puesto.a, puesto.de).reduce(function (t, l) {
+          return t + estadoPrestamo(l).total;
+        }, 0);
+        inMonto.value = Math.round(deuda).toLocaleString('es-CO');
+      }
       previo();
     }
     if (puesto) inMonto.focus();
@@ -3359,18 +3421,26 @@ import {
 
         var base = Date.now();
         var nota = $('f-nota').value.trim();
+        var grupo = 'g' + base;
+        // Saldó todo si el pago cubre por completo lo que debía.
+        var motivo = (puesto && puesto.saldar && !reparto.sobra &&
+                      reparto.partes.every(function (r) { return cero(r.queda); }))
+                     ? 'saldo' : 'reparto';
+
         var nuevos = reparto.partes.map(function (r, i) {
           return {
             id: base + i, fecha: cuando, de: finales.de, a: finales.a, tipo: 'pago',
             monto: r.monto, tasa: 0, periodo: '', unidad: '%',
-            ref: String(r.prestamo.id), nota: nota, borrado: false, actualizado: Date.now()
+            ref: String(r.prestamo.id), nota: nota, grupo: grupo, motivo: motivo,
+            borrado: false, actualizado: Date.now()
           };
         });
         if (reparto.sobra) {
           nuevos.push({
             id: base + nuevos.length, fecha: cuando, de: finales.de, a: finales.a, tipo: 'pago',
             monto: reparto.sobra, tasa: 0, periodo: '', unidad: '%',
-            ref: '', nota: nota, borrado: false, actualizado: Date.now()
+            ref: '', nota: nota, grupo: grupo, motivo: motivo,
+            borrado: false, actualizado: Date.now()
           });
         }
         registrar(function () { nuevos.forEach(function (m) { datos.movs.push(m); }); }).then(cerrar);
