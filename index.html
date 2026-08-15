@@ -83,7 +83,10 @@ html,body{margin:0;background:var(--paper)}
 }
 .deuda .quienes{min-width:0}
 .deuda .deudor{font-weight:600}
-.deuda .rel{color:var(--ink-soft);font-size:12px;display:block;margin-top:1px}
+.deuda .sub, .carpeta-cab .sub{
+  display:block;font-size:12px;color:var(--ink-soft);margin-top:1px;
+  background:none;border:0;padding:0;
+}
 .deuda .dequé{font-size:11px;opacity:.85}
 .deuda{padding:0}
 .deuda .cuerpo{
@@ -106,11 +109,18 @@ html,body{margin:0;background:var(--paper)}
 .carpeta-cab .flecha{color:var(--ink-soft);font-size:12px;flex:none;width:12px}
 .carpeta-cab .quienes{flex:1;min-width:0}
 .carpeta-cab .deudor{font-weight:600;font-size:15px}
-.carpeta-cab .rel{display:block;font-size:12px;color:var(--ink-soft);margin-top:1px}
+
 .carpeta-cab .cuanto{font-family:var(--mono);font-variant-numeric:tabular-nums;font-weight:500;color:var(--debe);white-space:nowrap}
 .carpeta-cuerpo{border-top:1px solid var(--rule-soft);background:#F3F7F1}
 .carpeta-cuerpo .deuda{border:0;border-bottom:1px solid var(--rule-soft);border-left:0;padding-left:18px}
 .carpeta-cuerpo .movs{border:0}
+.carpeta.grande{border-left-color:var(--ink)}
+.carpeta.grande > .carpeta-cab .deudor{font-family:var(--mono);font-size:11px;letter-spacing:.14em;text-transform:uppercase;font-weight:500}
+.carpeta .carpeta{border:0;border-top:1px solid var(--rule-soft);background:none}
+.carpeta .carpeta:first-child{border-top:0}
+.carpeta .carpeta .carpeta-cab{padding:10px 14px 10px 20px}
+.carpeta .carpeta .deudor{font-size:14px}
+.carpeta .carpeta .carpeta-cuerpo{background:#EFF4ED}
 .carpeta-cuerpo .mov{padding-left:16px}
 .carpeta-cuerpo .deuda:last-child{border-bottom:0}
 
@@ -532,7 +542,7 @@ import {
     appId: '1:754021039496:web:4ddf05feec8d2dac1ece3d'
   };
 
-  var VERSION = 'firebase-2026.08.15-F';
+  var VERSION = 'firebase-2026.08.15-G';
   var DUENO = 'jujofrave@gmail.com';
 
   var TIPOS = {
@@ -1471,7 +1481,7 @@ import {
                    '<button class="cuerpo" data-persona="' + esc(d.deudor) + '">' +
                      '<span class="quienes"><span class="deudor" style="font-weight:500">le debe a ' +
                        esc(d.acreedor) + '</span>' +
-                     '<span class="rel dequé">' + detalleTexto + '</span></span>' +
+                     '<span class="sub dequé">' + detalleTexto + '</span></span>' +
                      '<span class="cuanto">' + plata(d.monto) + '</span>' +
                    '</button>' +
                    botonAbonar(d) +
@@ -1569,6 +1579,7 @@ import {
   }
 
   var mesesAbiertos = null;   // null = todavía no se ha decidido cuál abrir
+  var movsAbiertos = false;   // la carpeta grande arranca plegada
 
   function nombreMes(iso) {
     var m = ['enero','febrero','marzo','abril','mayo','junio','julio',
@@ -1648,7 +1659,10 @@ import {
         if (claves.length) mesesAbiertos[claves[0]] = true;
       }
 
-      cont.innerHTML = claves.map(function (k) {
+      var totalMovs = lista.length;
+      var totalPlata = lista.reduce(function (t, m) { return t + m.monto; }, 0);
+
+      var interior = claves.map(function (k) {
         var abierto = !!mesesAbiertos[k];
         var suma = meses[k].reduce(function (t, m) { return t + m.monto; }, 0);
         return '<div class="carpeta' + (abierto ? ' abierta' : '') + '" style="border-left-color:var(--rule)">' +
@@ -1661,6 +1675,27 @@ import {
           (abierto ? '<div class="carpeta-cuerpo"><div class="movs">' + meses[k].map(filaMov).join('') + '</div></div>' : '') +
         '</div>';
       }).join('');
+
+      // Una sola carpeta con todo adentro: con muchos meses, la lista de meses
+      // ya era larga por sí sola.
+      cont.innerHTML =
+        '<div class="carpeta grande' + (movsAbiertos ? ' abierta' : '') + '">' +
+          '<button class="carpeta-cab" data-todos="1">' +
+            '<span class="flecha">' + (movsAbiertos ? '▾' : '▸') + '</span>' +
+            '<span class="quienes"><span class="deudor">Todos los movimientos</span>' +
+              '<span class="sub">' + totalMovs + ' en ' + claves.length + ' mes' +
+              (claves.length === 1 ? '' : 'es') + '</span></span>' +
+            '<span class="cuanto" style="color:var(--ink-soft)">' + plata(totalPlata) + '</span>' +
+          '</button>' +
+          (movsAbiertos ? '<div class="carpeta-cuerpo">' + interior + '</div>' : '') +
+        '</div>';
+
+      $('deudas');
+      var botonTodos = cont.querySelector('[data-todos]');
+      if (botonTodos) botonTodos.onclick = function () {
+        movsAbiertos = !movsAbiertos;
+        pintarMovs();
+      };
 
       Array.prototype.forEach.call(cont.querySelectorAll('[data-mes]'), function (b) {
         b.onclick = function () {
