@@ -507,7 +507,7 @@ import {
     appId: '1:754021039496:web:4ddf05feec8d2dac1ece3d'
   };
 
-  var VERSION = 'firebase-2026.08.14-I';
+  var VERSION = 'firebase-2026.08.14-J';
   var DUENO = 'jujofrave@gmail.com';
 
   var TIPOS = {
@@ -2236,6 +2236,161 @@ import {
 
   /* ---------- exportar a una hoja ---------- */
 
+  /* ---------- armar un Excel de verdad, sin librerías ---------- */
+
+  /**
+   * Un .xlsx es un zip con varios XML adentro. Se arma a mano para no
+   * depender de ninguna librería y que funcione también sin señal.
+   */
+  function tablaXML(filas) {
+    var xml = '<?xml version="1.0" encoding="UTF-8"?>' +
+      '<worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><sheetData>';
+    filas.forEach(function (fila, i) {
+      xml += '<row r="' + (i + 1) + '">';
+      fila.forEach(function (celda, j) {
+        var ref = letraColumna(j) + (i + 1);
+        var esNumero = typeof celda === 'number' && isFinite(celda);
+        if (esNumero) {
+          xml += '<c r="' + ref + '"><v>' + celda + '</v></c>';
+        } else {
+          var texto = String(celda === undefined || celda === null ? '' : celda);
+          xml += '<c r="' + ref + '" t="inlineStr"><is><t xml:space="preserve">' +
+                 texto.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;') +
+                 '</t></is></c>';
+        }
+      });
+      xml += '</row>';
+    });
+    return xml + '</sheetData></worksheet>';
+  }
+
+  function letraColumna(n) {
+    var s = '';
+    n++;
+    while (n > 0) {
+      var r = (n - 1) % 26;
+      s = String.fromCharCode(65 + r) + s;
+      n = Math.floor((n - 1) / 26);
+    }
+    return s;
+  }
+
+  var TABLA_CRC = (function () {
+    var t = [];
+    for (var n = 0; n < 256; n++) {
+      var c = n;
+      for (var k = 0; k < 8; k++) c = (c & 1) ? (0xEDB88320 ^ (c >>> 1)) : (c >>> 1);
+      t[n] = c >>> 0;
+    }
+    return t;
+  })();
+
+  function crc32(bytes) {
+    var c = 0xFFFFFFFF;
+    for (var i = 0; i < bytes.length; i++) c = TABLA_CRC[(c ^ bytes[i]) & 0xFF] ^ (c >>> 8);
+    return (c ^ 0xFFFFFFFF) >>> 0;
+  }
+
+  function aBytes(texto) {
+    var b = [];
+    for (var i = 0; i < texto.length; i++) {
+      var c = texto.charCodeAt(i);
+      if (c < 0x80) b.push(c);
+      else if (c < 0x800) b.push(0xC0 | (c >> 6), 0x80 | (c & 63));
+      else if (c < 0xD800 || c >= 0xE000) b.push(0xE0 | (c >> 12), 0x80 | ((c >> 6) & 63), 0x80 | (c & 63));
+      else {
+        i++;
+        c = 0x10000 + (((c & 0x3FF) << 10) | (texto.charCodeAt(i) & 0x3FF));
+        b.push(0xF0 | (c >> 18), 0x80 | ((c >> 12) & 63), 0x80 | ((c >> 6) & 63), 0x80 | (c & 63));
+      }
+    }
+    return b;
+  }
+
+  /** Zip sin comprimir: más simple y estos archivos son diminutos. */
+  function armarZip(archivos) {
+    var partes = [], central = [], desplazamiento = 0;
+
+    function n16(v) { return [v & 255, (v >> 8) & 255]; }
+    function n32(v) { return [v & 255, (v >> 8) & 255, (v >> 16) & 255, (v >> 24) & 255]; }
+
+    archivos.forEach(function (a) {
+      var nombre = aBytes(a.nombre);
+      var datos = aBytes(a.contenido);
+      var suma = crc32(datos);
+
+      var local = [].concat([0x50, 0x4B, 0x03, 0x04], n16(20), n16(0), n16(0), n16(0), n16(0),
+        n32(suma), n32(datos.length), n32(datos.length), n16(nombre.length), n16(0), nombre, datos);
+      partes = partes.concat(local);
+
+      central = central.concat([0x50, 0x4B, 0x01, 0x02], n16(20), n16(20), n16(0), n16(0), n16(0), n16(0),
+        n32(suma), n32(datos.length), n32(datos.length), n16(nombre.length), n16(0), n16(0), n16(0), n16(0),
+        n32(0), n32(desplazamiento), nombre);
+
+      desplazamiento += local.length;
+    });
+
+    var fin = [].concat([0x50, 0x4B, 0x05, 0x06], n16(0), n16(0),
+      n16(archivos.length), n16(archivos.length), n32(central.length), n32(desplazamiento), n16(0));
+
+    return new Uint8Array(partes.concat(central, fin));
+  }
+
+  function armarExcel(hojas) {
+    var nombres = hojas.map(function (h, i) {
+      return { nombre: h.nombre.slice(0, 31), id: i + 1 };
+    });
+
+    var archivos = [
+      { nombre: '[Content_Types].xml', contenido:
+        '<?xml version="1.0" encoding="UTF-8"?><Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">' +
+        '<Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/>' +
+        '<Default Extension="xml" ContentType="application/xml"/>' +
+        '<Override PartName="/xl/workbook.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml"/>' +
+        nombres.map(function (h) {
+          return '<Override PartName="/xl/worksheets/sheet' + h.id +
+                 '.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/>';
+        }).join('') + '</Types>' },
+
+      { nombre: '_rels/.rels', contenido:
+        '<?xml version="1.0" encoding="UTF-8"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">' +
+        '<Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="xl/workbook.xml"/>' +
+        '</Relationships>' },
+
+      { nombre: 'xl/workbook.xml', contenido:
+        '<?xml version="1.0" encoding="UTF-8"?><workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" ' +
+        'xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"><sheets>' +
+        nombres.map(function (h) {
+          return '<sheet name="' + h.nombre.replace(/[&<>"]/g, '') + '" sheetId="' + h.id + '" r:id="rId' + h.id + '"/>';
+        }).join('') + '</sheets></workbook>' },
+
+      { nombre: 'xl/_rels/workbook.xml.rels', contenido:
+        '<?xml version="1.0" encoding="UTF-8"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">' +
+        nombres.map(function (h) {
+          return '<Relationship Id="rId' + h.id + '" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" ' +
+                 'Target="worksheets/sheet' + h.id + '.xml"/>';
+        }).join('') + '</Relationships>' }
+    ];
+
+    hojas.forEach(function (h, i) {
+      archivos.push({ nombre: 'xl/worksheets/sheet' + (i + 1) + '.xml', contenido: tablaXML(h.filas) });
+    });
+
+    return armarZip(archivos);
+  }
+
+  function descargarExcel(hojas, nombreArchivo) {
+    var bytes = armarExcel(hojas);
+    var blob = new Blob([bytes], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+    var url = URL.createObjectURL(blob);
+    var a = document.createElement('a');
+    a.href = url;
+    a.download = nombreArchivo;
+    document.body.appendChild(a);
+    a.click();
+    setTimeout(function () { document.body.removeChild(a); URL.revokeObjectURL(url); }, 1000);
+  }
+
   /** Arma tres tablas separadas, listas para pegar cada una en su propia hoja. */
   function formExportar() {
     panel.innerHTML = '';
@@ -2275,10 +2430,17 @@ import {
       { id: 'deu', titulo: 'Cuentas abiertas al ' + hoy() + ' (' + (tDeudas.length - 1) + ')', tsv: aTexto(tDeudas) }
     ];
 
+    var hojasExcel = [
+      { nombre: 'Personas', filas: tPersonas },
+      { nombre: 'Movimientos', filas: tMovs },
+      { nombre: 'Cuentas abiertas', filas: tDeudas }
+    ];
+
     panel2.innerHTML =
       '<div class="hoja"><h3>Exportar a una hoja</h3>' +
-      '<p class="pista" style="margin:0 0 12px">Tres tablas aparte. Copia cada una y pégala en su propia ' +
-      'hoja de Google Sheets o Excel: las columnas caen solas en su lugar. Es una foto de hoy.</p>' +
+      '<p class="pista" style="margin:0 0 12px">Descarga las tres juntas en un Excel, o copia cada una ' +
+      'y pégala en su propia hoja. Es una foto de hoy, no se actualiza sola.</p>' +
+      '<div class="acciones" style="margin-top:0"><button class="btn" id="f-excel">Descargar Excel</button></div>' +
       tablas.map(function (t) {
         return '<h4 style="font-family:var(--mono);font-size:10px;letter-spacing:.16em;text-transform:uppercase;' +
                'color:var(--ink-soft);margin:16px 0 6px">' + esc(t.titulo) + '</h4>' +
@@ -2289,6 +2451,16 @@ import {
       '<div class="acciones"><button class="btn ghost" id="f-no">Cerrar</button></div></div>';
 
     $('f-no').onclick = cerrar;
+
+    $('f-excel').onclick = function () {
+      try {
+        descargarExcel(hojasExcel, 'cuentas-claras-' + hoy() + '.xlsx');
+        $('f-excel').textContent = 'Descargado';
+        setTimeout(function () { $('f-excel').textContent = 'Descargar Excel'; }, 2500);
+      } catch (e) {
+        alert('No se pudo armar el archivo: ' + e.message);
+      }
+    };
 
     Array.prototype.forEach.call(panel2.querySelectorAll('[data-copiar]'), function (b) {
       b.onclick = function () {
