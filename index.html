@@ -530,7 +530,7 @@ import {
     appId: '1:754021039496:web:4ddf05feec8d2dac1ece3d'
   };
 
-  var VERSION = 'firebase-2026.08.15-C';
+  var VERSION = 'firebase-2026.08.15-D';
   var DUENO = 'jujofrave@gmail.com';
 
   var TIPOS = {
@@ -952,6 +952,33 @@ import {
     return Math.max(0, m);
   }
 
+  /** Suma meses respetando el largo real de cada uno: el 31 de enero + 1 mes es el 28 de febrero. */
+  function sumarMeses(iso, meses) {
+    var a = String(iso).split('-').map(Number);
+    var anio = a[0], mes = a[1] - 1 + meses, dia = a[2];
+    anio += Math.floor(mes / 12);
+    mes = ((mes % 12) + 12) % 12;
+    var ultimo = new Date(Date.UTC(anio, mes + 1, 0)).getUTCDate();
+    if (dia > ultimo) dia = ultimo;
+    return anio + '-' + String(mes + 1).padStart(2, '0') + '-' + String(dia).padStart(2, '0');
+  }
+
+  /**
+   * Cuántos períodos han corrido, con decimales. Mide contra los días reales
+   * que hay entre un aniversario y el siguiente, así que un mes es un mes
+   * tenga 28, 29, 30 o 31 días, y medio mes es exactamente la mitad.
+   */
+  function fraccionPeriodos(inicio, hasta, periodo) {
+    var cada = MESES_PERIODO[periodo];
+    if (!cada) return 0;
+    var enteros = periodosCumplidos(inicio, hasta, periodo);
+    var desde = sumarMeses(inicio, enteros * cada);
+    var siguiente = sumarMeses(inicio, (enteros + 1) * cada);
+    var largo = diasEntre(desde, siguiente);
+    var corridos = diasEntre(desde, hasta);
+    return enteros + (largo ? corridos / largo : 0);
+  }
+
   function periodosCumplidos(inicio, hasta, periodo) {
     var cada = MESES_PERIODO[periodo];
     if (!cada) return 0;
@@ -995,24 +1022,19 @@ import {
     //  · en pesos, se cobra la cuota entera cada vez que se cumple un período;
     //  · en porcentaje, corre día a día sobre lo que se deba.
     var porCuota = (enPesos && periodo && periodo !== 'fijo' && tasa) ? tasa : 0;
-    var factorDia = (!enPesos && periodo && periodo !== 'fijo' && tasa)
-      ? (tasa / 100) / PERIODOS[periodo].dias
-      : 0;
-    var cuotasCobradas = 0;
+    var porcentaje = (!enPesos && periodo && periodo !== 'fijo' && tasa) ? tasa / 100 : 0;
+    var fraccionUsada = 0;
 
     var fecha = l.fecha;
 
     function correr(hasta) {
-      if (capital > 0) {
-        if (porCuota) {
-          var n = periodosCumplidos(l.fecha, hasta, periodo);
-          if (n > cuotasCobradas) {
-            causado += (n - cuotasCobradas) * porCuota;
-            cuotasCobradas = n;
-          }
-        } else if (factorDia) {
-          causado += capital * factorDia * diasEntre(fecha, hasta);
+      if (porCuota || porcentaje) {
+        var f = fraccionPeriodos(l.fecha, hasta, periodo);
+        var tramo = Math.max(0, f - fraccionUsada);
+        if (capital > 0 && tramo) {
+          causado += porCuota ? porCuota * tramo : capital * porcentaje * tramo;
         }
+        if (f > fraccionUsada) fraccionUsada = f;
       }
       if (Date.parse(hasta + 'T00:00:00Z') > Date.parse(fecha + 'T00:00:00Z')) fecha = hasta;
     }
@@ -1037,7 +1059,7 @@ import {
       abonado: abonado,
       total: capital + pendiente,
       conInteres: !!(tasa && periodo),
-      detenido: !!(porCuota || factorDia) && cero(capital),
+      detenido: !!(porCuota || porcentaje) && cero(capital),
       saldado: cero(capital) && cero(pendiente)
     };
   }
@@ -2974,7 +2996,7 @@ import {
             ? 'Se cobra esa cantidad una sola vez, y no crece con el tiempo.'
             : 'Se cobra una sola vez sobre el monto prestado, y no crece con el tiempo.')
         : (enPesos
-            ? 'Esa cantidad completa cada vez que se cumple el período. No baja al abonar, y se detiene al saldar.'
+            ? 'Esa cantidad por período, proporcional a los días reales que pasen. No baja al abonar, y se detiene al saldar.'
             : 'Se cobra sobre lo que quede debiendo, proporcional a los días que pasen.');
     }
 
@@ -3069,7 +3091,7 @@ import {
             ? '<span class="efecto">Intereses: ' + plata(porVez) + ' de una vez. Debería ' +
               plata(monto + porVez) + ' en total.</span>'
             : '<span class="efecto">Intereses: ' + plata(porVez) + ' por cada ' + cadaCuanto + ', ' +
-              (enPesos ? 'cobrados al cumplirse cada uno, sin bajar aunque abone'
+              (enPesos ? 'proporcional a los días, sin bajar aunque abone'
                        : 'sobre lo que quede debiendo, proporcional a los días') +
               '. Se detienen al pagar todo.</span>';
         }
