@@ -96,6 +96,22 @@ html,body{margin:0;background:var(--paper)}
 .rel-fila .abonar{flex:none;align-self:center}
 .deuda .cuanto{font-family:var(--mono);font-variant-numeric:tabular-nums;font-weight:500;color:var(--debe);white-space:nowrap}
 
+/* ---------- carpetas de cuentas ---------- */
+.carpeta{background:var(--card);border:1px solid var(--rule-soft);border-left:3px solid var(--debe)}
+.carpeta.abierta{border-color:var(--ink)}
+.carpeta-cab{
+  display:flex;align-items:center;gap:10px;width:100%;padding:12px 14px;
+  background:none;border:0;text-align:left;color:inherit;font:inherit;
+}
+.carpeta-cab .flecha{color:var(--ink-soft);font-size:12px;flex:none;width:12px}
+.carpeta-cab .quienes{flex:1;min-width:0}
+.carpeta-cab .deudor{font-weight:600;font-size:15px}
+.carpeta-cab .rel{display:block;font-size:12px;color:var(--ink-soft);margin-top:1px}
+.carpeta-cab .cuanto{font-family:var(--mono);font-variant-numeric:tabular-nums;font-weight:500;color:var(--debe);white-space:nowrap}
+.carpeta-cuerpo{border-top:1px solid var(--rule-soft);background:#F3F7F1}
+.carpeta-cuerpo .deuda{border:0;border-bottom:1px solid var(--rule-soft);border-left:0;padding-left:18px}
+.carpeta-cuerpo .deuda:last-child{border-bottom:0}
+
 /* ---------- personas ---------- */
 .personas{display:grid;gap:7px}
 .persona{
@@ -279,7 +295,7 @@ html,body{margin:0;background:var(--paper)}
 /* ---------- movimientos ---------- */
 .movs{border-top:1px solid var(--ink);border-bottom:1px solid var(--ink)}
 .mov{
-  display:grid;grid-template-columns:52px 1fr auto 26px;align-items:baseline;gap:10px;
+  display:grid;grid-template-columns:52px 1fr auto minmax(26px,auto);align-items:baseline;gap:10px;
   padding:9px 10px;border-bottom:1px solid var(--rule-soft);font-size:14px;
 }
 .mov:nth-child(odd){background:#DFE9DA}
@@ -507,7 +523,7 @@ import {
     appId: '1:754021039496:web:4ddf05feec8d2dac1ece3d'
   };
 
-  var VERSION = 'firebase-2026.08.14-J';
+  var VERSION = 'firebase-2026.08.15-A';
   var DUENO = 'jujofrave@gmail.com';
 
   var TIPOS = {
@@ -1166,10 +1182,11 @@ import {
 
   function normCorreo(c) { return String(c || '').trim().toLowerCase(); }
 
-  var LLAVES = ['entrar', 'editarPers', 'borrarMovs', 'borrarPers', 'papelera', 'admin'];
+  var LLAVES = ['entrar', 'editarMovs', 'editarPers', 'borrarMovs', 'borrarPers', 'papelera', 'admin'];
 
   var NOMBRE_LLAVE = {
     entrar: 'Pueden entrar a la app',
+    editarMovs: 'Pueden corregir movimientos ya registrados',
     editarPers: 'Pueden crear y editar personas',
     borrarMovs: 'Pueden eliminar movimientos',
     borrarPers: 'Pueden eliminar personas',
@@ -1177,7 +1194,7 @@ import {
     admin: 'Pueden ver y dar permisos'
   };
 
-  var CORTO_LLAVE = { entrar: 'ENTRA', editarPers: 'EDITA PERS', borrarMovs: 'BORRA MOVS',
+  var CORTO_LLAVE = { entrar: 'ENTRA', editarMovs: 'CORRIGE MOVS', editarPers: 'EDITA PERS', borrarMovs: 'BORRA MOVS',
                       borrarPers: 'BORRA PERS', papelera: 'PAPELERA', admin: 'ADMINISTRA' };
 
   /** Los permisos viejos tenían una sola llave "borrar"; se reparte en las tres nuevas. */
@@ -1191,6 +1208,7 @@ import {
       // quien ya podía borrar personas, con más razón puede editarlas
       if (p.editarPers === undefined) p.editarPers = !!p.borrarPers;
       if (p.papelera === undefined) p.papelera = !!p.admin;
+      if (p.editarMovs === undefined) p.editarMovs = !!p.admin;
       LLAVES.forEach(function (k) { if (p[k] === undefined) p[k] = false; });
       if (p.borrar !== undefined) delete p.borrar;
     });
@@ -1225,6 +1243,7 @@ import {
   }
 
   function puedeEditarPers() { return tengo('editarPers'); }
+  function puedeEditarMovs() { return esAdmin() || tengo('editarMovs'); }
   function puedeBorrarMovs() { return tengo('borrarMovs'); }
   function puedeBorrarPers() { return tengo('borrarPers'); }
   function esAdmin() { return tengo('admin'); }
@@ -1345,6 +1364,8 @@ import {
     return 'hace ' + Math.round(h / 24) + ' días';
   }
 
+  var carpetasAbiertas = {};
+
   function pintarDeudas() {
     var cont = $('deudas');
 
@@ -1359,21 +1380,60 @@ import {
       cont.innerHTML = '<div class="vacio">' + (movsVivos().length ? 'Todos están a paz y salvo.' : 'Aquí van a aparecer las cuentas abiertas.') + '</div>';
       return;
     }
-    cont.innerHTML = lista.map(function (d) {
-      var detalleTexto = d.ref
-        ? 'préstamo del ' + fechaCorta(d.fecha) + (d.nota ? ' · ' + esc(d.nota) : '') +
-          (d.tasa ? ' · ' + esc(d.tasa) : '')
-        : 'cuenta general, sin préstamo';
-      return '<div class="deuda">' +
-               '<button class="cuerpo" data-persona="' + esc(d.deudor) + '">' +
-                 '<span class="quienes"><span class="deudor">' + esc(d.deudor) + '</span>' +
-                 '<span class="rel">le debe a ' + esc(d.acreedor) + '</span>' +
-                 '<span class="rel dequé">' + detalleTexto + '</span></span>' +
-                 '<span class="cuanto">' + plata(d.monto) + '</span>' +
-               '</button>' +
-               botonAbonar(d) +
-             '</div>';
+
+    // Una carpeta por deudor: con muchas cuentas abiertas, la lista suelta
+    // llena la pantalla y no deja ver nada.
+    var carpetas = {};
+    lista.forEach(function (d) {
+      if (!carpetas[d.deudor]) carpetas[d.deudor] = { deudor: d.deudor, total: 0, cuentas: [] };
+      carpetas[d.deudor].total += d.monto;
+      carpetas[d.deudor].cuentas.push(d);
+    });
+
+    var orden = Object.keys(carpetas).map(function (k) { return carpetas[k]; })
+      .sort(function (a, b) { return b.total - a.total; });
+
+    cont.innerHTML = orden.map(function (c) {
+      var abierta = !!carpetasAbiertas[c.deudor];
+      var aQuienes = {};
+      c.cuentas.forEach(function (d) { aQuienes[d.acreedor] = true; });
+      var nombres = Object.keys(aQuienes);
+      var resumen = c.cuentas.length + ' cuenta' + (c.cuentas.length === 1 ? '' : 's') +
+        ' con ' + (nombres.length === 1 ? nombres[0] : nombres.length + ' personas');
+
+      return '<div class="carpeta' + (abierta ? ' abierta' : '') + '">' +
+        '<button class="carpeta-cab" data-carpeta="' + esc(c.deudor) + '">' +
+          '<span class="flecha">' + (abierta ? '▾' : '▸') + '</span>' +
+          '<span class="quienes"><span class="deudor">' + esc(c.deudor) + '</span>' +
+            '<span class="rel">' + esc(resumen) + '</span></span>' +
+          '<span class="cuanto">' + plata(c.total) + '</span>' +
+        '</button>' +
+        (abierta ? '<div class="carpeta-cuerpo">' + c.cuentas.map(function (d) {
+          var detalleTexto = d.ref
+            ? 'préstamo del ' + fechaCorta(d.fecha) + (d.nota ? ' · ' + esc(d.nota) : '') +
+              (d.tasa ? ' · ' + esc(d.tasa) : '')
+            : 'cuenta general, sin préstamo';
+          return '<div class="deuda">' +
+                   '<button class="cuerpo" data-persona="' + esc(d.deudor) + '">' +
+                     '<span class="quienes"><span class="deudor" style="font-weight:500">le debe a ' +
+                       esc(d.acreedor) + '</span>' +
+                     '<span class="rel dequé">' + detalleTexto + '</span></span>' +
+                     '<span class="cuanto">' + plata(d.monto) + '</span>' +
+                   '</button>' +
+                   botonAbonar(d) +
+                 '</div>';
+        }).join('') + '</div>' : '') +
+      '</div>';
     }).join('');
+
+    Array.prototype.forEach.call(cont.querySelectorAll('[data-carpeta]'), function (b) {
+      b.onclick = function () {
+        var k = b.dataset.carpeta;
+        if (carpetasAbiertas[k]) delete carpetasAbiertas[k]; else carpetasAbiertas[k] = true;
+        pintarDeudas();
+      };
+    });
+
     enlazarFicha(cont, '.deuda .cuerpo');
     enlazarAbonos(cont);
   }
@@ -1396,7 +1456,7 @@ import {
 
       var frase = (d.favor && d.debe)
         ? 'en neto ' + (d.neto > 0 ? 'le deben ' : (d.neto < 0 ? 'debe ' : '')) + (d.neto ? plata(d.neto) : 'queda en cero')
-        : (d.favor || d.debe ? 'con ' + (d.leDeben.length + d.debeA.length) + ' persona' + ((d.leDeben.length + d.debeA.length) === 1 ? '' : 's') : 'a paz y salvo');
+        : (d.favor || d.debe ? conCuantos(d) : 'a paz y salvo');
 
       return '<button class="persona" data-lado="' + lado + '" data-persona="' + esc(p.nombre) + '">' +
                '<span><span class="nombre">' + esc(p.nombre) + '</span><span class="frase">' + esc(frase) + '</span></span>' +
@@ -1404,6 +1464,16 @@ import {
              '</button>';
     }).join('');
     enlazarFicha(cont, '.persona');
+  }
+
+  /** Cuenta personas distintas, no cuentas: alguien puede tener tres préstamos con uno solo. */
+  function conCuantos(d) {
+    var quienes = {};
+    d.leDeben.concat(d.debeA).forEach(function (r) { quienes[r.quien] = true; });
+    var n = Object.keys(quienes).length;
+    var cuentas = d.leDeben.length + d.debeA.length;
+    return 'con ' + n + ' persona' + (n === 1 ? '' : 's') +
+           (cuentas > n ? ' · ' + cuentas + ' cuentas' : '');
   }
 
   function linea(etiqueta, monto, lado) {
@@ -1483,9 +1553,10 @@ import {
       var ultima = modoSel
         ? '<span class="marca"><input type="checkbox" data-id="' + m.id + '"' + (elegidos[m.id] ? ' checked' : '') +
           ' aria-label="Seleccionar movimiento"></span>'
-        : (puedeBorrarMovs()
+        : ((puedeEditarMovs() ? '<button class="borrar" data-editar="' + m.id + '" aria-label="Corregir">✎</button>' : '') +
+           (puedeBorrarMovs()
             ? '<button class="borrar" data-id="' + m.id + '" aria-label="Borrar movimiento">×</button>'
-            : '<span></span>');
+            : ''));
       return '<div class="mov' + (modoSel && elegidos[m.id] ? ' elegido' : '') + '" data-id="' + m.id + '">' +
                '<span class="fecha">' + fechaCorta(m.fecha) + '</span>' +
                '<span><span class="quien">' + resaltar(m.de) + '</span>' +
@@ -1508,9 +1579,18 @@ import {
       return;
     }
 
-    Array.prototype.forEach.call(cont.querySelectorAll('.borrar'), function (b) {
+    Array.prototype.forEach.call(cont.querySelectorAll('[data-editar]'), function (b) {
       b.onclick = function () {
-        if (!confirm('¿Borrar este movimiento? Se borra también de la hoja.')) return;
+        var m = movsVivos().filter(function (x) { return String(x.id) === b.dataset.editar; })[0];
+        if (!m) return;
+        formMov({ editar: m });
+        $('panel').scrollIntoView({ behavior: 'smooth', block: 'center' });
+      };
+    });
+
+    Array.prototype.forEach.call(cont.querySelectorAll('[data-id].borrar'), function (b) {
+      b.onclick = function () {
+        if (!confirm('¿Borrar este movimiento? Se manda a la papelera.')) return;
         registrar(function () {
           datos.movs.forEach(function (m) {
             if (m.id === +b.dataset.id) { m.borrado = true; m.actualizado = Date.now(); }
@@ -1762,6 +1842,7 @@ import {
     var partes = [];
     if (esAdmin()) partes.push('administra');
     if (puedeUsarPapelera() && !esAdmin()) partes.push('papelera');
+    if (puedeEditarMovs()) partes.push('corrige movimientos');
     if (puedeEditarPers()) partes.push('edita personas');
     if (puedeBorrarMovs()) partes.push('borra movimientos');
     if (puedeBorrarPers()) partes.push('borra personas');
@@ -2742,6 +2823,8 @@ import {
    */
   function formMov(preDe) {
     var puesto = (preDe && typeof preDe === 'object') ? preDe : null;
+    var editando = (puesto && puesto.editar) ? puesto.editar : null;
+    if (editando) puesto = { de: editando.de, a: editando.a, tipo: editando.tipo, ref: editando.ref };
     panel2.innerHTML = '';
     var gente = personasVivas();
     if (gente.length < 2) {
@@ -2780,7 +2863,7 @@ import {
       '<p class="pista" id="f-frase"></p></div>';
 
     panel.innerHTML =
-      '<div class="hoja"><h3>Registrar movimiento</h3>' +
+      '<div class="hoja"><h3>' + (editando ? 'Corregir movimiento' : 'Registrar movimiento') + '</h3>' +
       '<p class="error" id="err" hidden></p>' +
       lado +
       '<div class="campo"><label for="f-monto">Monto</label>' +
@@ -2793,7 +2876,8 @@ import {
       '<input type="date" id="f-fecha" max="' + hoy() + '" value="' + hoy() + '"></div>' +
       '<div class="campo"><label for="f-nota">Nota (opcional)</label>' +
       '<input type="text" id="f-nota" autocomplete="off" placeholder="Para el arriendo"></div>' +
-      '<div class="acciones"><button class="btn" id="f-ok">Guardar movimiento</button>' +
+      '<div class="acciones"><button class="btn" id="f-ok">' +
+        (editando ? 'Guardar los cambios' : 'Guardar movimiento') + '</button>' +
       '<button class="btn ghost" id="f-no">Cancelar</button></div></div>';
 
     var inMonto = $('f-monto'), selDe = $('f-de'), selA = $('f-a');
@@ -2976,6 +3060,23 @@ import {
       if (radio) radio.checked = true;
     }
 
+    if (editando) {
+      inMonto.value = Number(editando.monto).toLocaleString('es-CO');
+      $('f-fecha').value = editando.fecha;
+      $('f-nota').value = editando.nota || '';
+      pintarInteres();
+      if ($('f-periodo')) {
+        $('f-periodo').value = editando.periodo || '';
+        $('f-unidad').value = editando.unidad || '%';
+        ajustarTasa();
+        if ($('f-tasa') && Number(editando.tasa)) {
+          $('f-tasa').value = (editando.unidad === '$')
+            ? Number(editando.tasa).toLocaleString('es-CO')
+            : String(editando.tasa);
+        }
+      }
+    }
+
     refrescar();
 
     if (puesto && puesto.ref && $('f-ref')) {
@@ -3008,7 +3109,7 @@ import {
       var sel = $('f-ref');
       var ie = tipo === 'prestamo' ? interesElegido() : { periodo: '', tasa: 0 };
       var mov = {
-        id: Date.now(),
+        id: editando ? editando.id : Date.now(),
         fecha: cuando,
         de: finales.de,
         a: finales.a,
@@ -3022,7 +3123,13 @@ import {
         borrado: false,
         actualizado: Date.now()
       };
-      registrar(function () { datos.movs.push(mov); }).then(cerrar);
+      registrar(function () {
+        if (editando) {
+          datos.movs = datos.movs.map(function (x) { return x.id === mov.id ? mov : x; });
+        } else {
+          datos.movs.push(mov);
+        }
+      }).then(cerrar);
     };
   }
 

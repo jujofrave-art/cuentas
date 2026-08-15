@@ -6,7 +6,7 @@
  * en aparecer.
  */
 
-var CACHE = 'cuentas-firebase-2026.08.14-J';
+var CACHE = 'cuentas-firebase-2026.08.15-A';
 var BASE = new URL('./', self.location).pathname;
 
 var ARCHIVOS = [
