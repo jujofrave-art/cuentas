@@ -530,7 +530,7 @@ import {
     appId: '1:754021039496:web:4ddf05feec8d2dac1ece3d'
   };
 
-  var VERSION = 'firebase-2026.08.15-D';
+  var VERSION = 'firebase-2026.08.15-E';
   var DUENO = 'jujofrave@gmail.com';
 
   var TIPOS = {
@@ -1107,6 +1107,29 @@ import {
         if (sa !== sb) return sa - sb;
         return a.fecha === b.fecha ? b.id - a.id : (a.fecha < b.fecha ? 1 : -1);
       });
+  }
+
+  /**
+   * Reparte un abono entre todas las cuentas abiertas que el deudor tiene con
+   * esa persona, empezando por las más viejas. Devuelve cuánto va a cada una.
+   */
+  function repartirEntre(acreedor, deudor, monto) {
+    var abiertos = prestamosEntre(acreedor, deudor).filter(function (l) {
+      return !estadoPrestamo(l).saldado;
+    });
+    var resto = monto;
+    var partes = [];
+
+    abiertos.forEach(function (l) {
+      if (resto <= 0) return;
+      var debe = estadoPrestamo(l).total;
+      var pone = Math.min(resto, debe);
+      if (pone <= 0) return;
+      partes.push({ prestamo: l, monto: pone, queda: debe - pone });
+      resto -= pone;
+    });
+
+    return { partes: partes, sobra: resto > 0 ? resto : 0 };
   }
 
   /** Texto corto que explica en qué va un préstamo o a cuál se le abonó. */
@@ -3041,7 +3064,12 @@ import {
           return '<option value="' + l.id + '"' + (String(previoRef) === String(l.id) ? ' selected' : '') + '>' +
                  esc(etq) + '</option>';
         }).join('') +
-        '<option value=""' + (previoRef === '' ? ' selected' : '') + '>Sin asignar · baja la deuda general</option>' +
+        (abiertos.length > 1
+          ? '<option value="__repartir"' + (previoRef === '__repartir' ? ' selected' : '') + '>' +
+            'Repartir entre sus ' + abiertos.length + ' cuentas con ' + esc(lados.a) + ' · las más viejas primero' +
+            '</option>'
+          : '') +
+        '<option value=""' + (previoRef === '' ? ' selected' : '') + '>Sin asignar · queda como cuenta general</option>' +
         '</select></div>';
 
       $('f-ref').onchange = previo;
@@ -3065,7 +3093,19 @@ import {
 
       var extra = '';
       var sel = $('f-ref');
-      if (tipoElegido() === 'pago' && sel && sel.value) {
+
+      if (tipoElegido() === 'pago' && sel && sel.value === '__repartir') {
+        var reparto = repartirEntre(lados.a, lados.de, monto);
+        extra = '<span class="efecto">Se reparte así: ' +
+          reparto.partes.map(function (r) {
+            return fechaCorta(r.prestamo.fecha) + ' ' + plata(r.monto) +
+                   (cero(r.queda) ? ' (queda saldado)' : ' (le quedan ' + plata(r.queda) + ')');
+          }).join(' · ') +
+          (reparto.sobra ? ' · sobran ' + plata(reparto.sobra) + ', quedan como cuenta general' : '') +
+          '</span>';
+      }
+
+      if (tipoElegido() === 'pago' && sel && sel.value && sel.value !== '__repartir') {
         var l = prestamoPorId(sel.value);
         if (l) {
           var e = estadoPrestamo(l);
@@ -3165,6 +3205,38 @@ import {
       var tipo = tipoElegido();
       var sel = $('f-ref');
       var ie = tipo === 'prestamo' ? interesElegido() : { periodo: '', tasa: 0 };
+
+      // Repartir: en vez de un abono suelto, se crea uno por cada cuenta,
+      // así queda escrito cuánto le tocó a cada préstamo.
+      if (tipo === 'pago' && sel && sel.value === '__repartir') {
+        var reparto = repartirEntre(finales.a, finales.de, monto);
+        if (!reparto.partes.length) {
+          err.textContent = 'No hay cuentas abiertas para repartir.'; err.hidden = false; return;
+        }
+        var resumen = reparto.partes.map(function (r) {
+          return fechaCorta(r.prestamo.fecha) + ': ' + plata(r.monto);
+        }).join('  ·  ') + (reparto.sobra ? '  ·  sobrante: ' + plata(reparto.sobra) : '');
+        if (!confirm('El abono se reparte así:\n\n' + resumen + '\n\n¿Seguir?')) return;
+
+        var base = Date.now();
+        var nota = $('f-nota').value.trim();
+        var nuevos = reparto.partes.map(function (r, i) {
+          return {
+            id: base + i, fecha: cuando, de: finales.de, a: finales.a, tipo: 'pago',
+            monto: r.monto, tasa: 0, periodo: '', unidad: '%',
+            ref: String(r.prestamo.id), nota: nota, borrado: false, actualizado: Date.now()
+          };
+        });
+        if (reparto.sobra) {
+          nuevos.push({
+            id: base + nuevos.length, fecha: cuando, de: finales.de, a: finales.a, tipo: 'pago',
+            monto: reparto.sobra, tasa: 0, periodo: '', unidad: '%',
+            ref: '', nota: nota, borrado: false, actualizado: Date.now()
+          });
+        }
+        registrar(function () { nuevos.forEach(function (m) { datos.movs.push(m); }); }).then(cerrar);
+        return;
+      }
       var mov = {
         id: editando ? editando.id : Date.now(),
         fecha: cuando,
