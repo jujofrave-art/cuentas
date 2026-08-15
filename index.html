@@ -366,7 +366,7 @@ mark{background:#F4E7A8;color:inherit;padding:0 1px}
 .lista-pers .quitar:hover{opacity:1;color:var(--debe)}
 
 textarea.tsv{
-  width:100%;height:150px;font-family:var(--mono);font-size:11px;
+  width:100%;height:110px;font-family:var(--mono);font-size:11px;
   border:1px solid var(--rule);padding:9px;background:#fff;color:var(--ink);white-space:pre;
 }
 .pie{padding:24px 20px 0;font-size:12px;color:var(--ink-soft);border-top:1px solid var(--rule);margin-top:26px}
@@ -507,7 +507,7 @@ import {
     appId: '1:754021039496:web:4ddf05feec8d2dac1ece3d'
   };
 
-  var VERSION = 'firebase-2026.08.14-H';
+  var VERSION = 'firebase-2026.08.14-I';
   var DUENO = 'jujofrave@gmail.com';
 
   var TIPOS = {
@@ -1636,8 +1636,7 @@ import {
                  '<span class="rel-txt">le debe a ' + esc(nombre) +
                  (r.ref ? ' · préstamo del ' + fechaCorta(r.fecha) + (r.nota ? ' (' + esc(r.nota) + ')' : '')
                         : ' · cuenta general') + '</span></span>' +
-                 '<span class="cifrita">' + plata(r.monto) + '</span></button>' +
-                 botonAbonar({ ref: r.ref, deudor: r.quien, acreedor: nombre }) + '</div>';
+                 '<span class="cifrita">' + plata(r.monto) + '</span></button></div>';
         }).join('') + '</div>'
       : '';
 
@@ -2237,20 +2236,24 @@ import {
 
   /* ---------- exportar a una hoja ---------- */
 
-  /** Arma la tabla lista para pegar en Google Sheets o Excel. */
+  /** Arma tres tablas separadas, listas para pegar cada una en su propia hoja. */
   function formExportar() {
     panel.innerHTML = '';
 
-    var filas = [['Fecha', 'De', 'Para', 'Tipo', 'Monto', 'Interés', 'Período',
-                  'Abono al préstamo', 'Nota', 'Debe hoy']];
+    var tPersonas = [['Nombre', 'Correo']];
+    personasVisibles().forEach(function (p) {
+      tPersonas.push([p.nombre, p.correo || '']);
+    });
 
+    var tMovs = [['Fecha', 'De', 'Para', 'Tipo', 'Monto', 'Interés', 'Período',
+                  'Abono al préstamo', 'Nota', 'Debe hoy']];
     movsVivos().slice().sort(function (a, b) { return a.fecha < b.fecha ? -1 : 1; }).forEach(function (m) {
       var refTexto = '';
       if (m.tipo === 'pago' && m.ref) {
         var l = prestamoPorId(m.ref);
         refTexto = l ? 'del ' + fechaCorta(l.fecha) + ' (' + plata(l.monto) + ')' : '';
       }
-      filas.push([
+      tMovs.push([
         m.fecha, m.de, m.a, TIPOS[m.tipo].texto, m.monto,
         (Number(m.tasa) || 0) ? (m.unidad === '$' ? m.tasa : m.tasa + '%') : '',
         m.periodo ? PERIODOS[m.periodo].texto : '',
@@ -2259,32 +2262,46 @@ import {
       ]);
     });
 
-    filas.push([]);
-    filas.push(['DEUDAS ABIERTAS AL ' + hoy()]);
+    var tDeudas = [['Deudor', 'Acreedor', 'Monto', 'De qué']];
     deudas().forEach(function (d) {
-      filas.push([d.deudor, 'le debe a', d.acreedor, Math.round(d.monto)]);
+      tDeudas.push([d.deudor, d.acreedor, Math.round(d.monto),
+        d.ref ? 'préstamo del ' + d.fecha + (d.nota ? ' · ' + d.nota : '') : 'cuenta general']);
     });
 
-    var tsv = filas.map(function (f) { return f.join('\t'); }).join('\n');
+    var aTexto = function (filas) { return filas.map(function (f) { return f.join('\t'); }).join('\n'); };
+    var tablas = [
+      { id: 'per', titulo: 'Personas (' + (tPersonas.length - 1) + ')', tsv: aTexto(tPersonas) },
+      { id: 'mov', titulo: 'Movimientos (' + (tMovs.length - 1) + ')', tsv: aTexto(tMovs) },
+      { id: 'deu', titulo: 'Cuentas abiertas al ' + hoy() + ' (' + (tDeudas.length - 1) + ')', tsv: aTexto(tDeudas) }
+    ];
 
     panel2.innerHTML =
       '<div class="hoja"><h3>Exportar a una hoja</h3>' +
-      '<p class="pista" style="margin:0 0 10px">Copia esta tabla y pégala en una hoja en blanco de ' +
-      'Google Sheets o Excel: cada columna cae en su lugar. Es una foto de hoy, no se actualiza sola.</p>' +
-      '<textarea class="tsv" id="f-tsv" readonly>' + esc(tsv) + '</textarea>' +
-      '<div class="acciones"><button class="btn" id="f-copiar">Copiar tabla</button>' +
-      '<button class="btn ghost" id="f-no">Cerrar</button></div></div>';
+      '<p class="pista" style="margin:0 0 12px">Tres tablas aparte. Copia cada una y pégala en su propia ' +
+      'hoja de Google Sheets o Excel: las columnas caen solas en su lugar. Es una foto de hoy.</p>' +
+      tablas.map(function (t) {
+        return '<h4 style="font-family:var(--mono);font-size:10px;letter-spacing:.16em;text-transform:uppercase;' +
+               'color:var(--ink-soft);margin:16px 0 6px">' + esc(t.titulo) + '</h4>' +
+               '<textarea class="tsv" id="tsv-' + t.id + '" readonly>' + esc(t.tsv) + '</textarea>' +
+               '<div class="acciones" style="margin-top:6px">' +
+                 '<button class="btn ghost mini" data-copiar="' + t.id + '">Copiar esta tabla</button></div>';
+      }).join('') +
+      '<div class="acciones"><button class="btn ghost" id="f-no">Cerrar</button></div></div>';
 
     $('f-no').onclick = cerrar;
-    $('f-copiar').onclick = function () {
-      var ta = $('f-tsv');
-      ta.select();
-      ta.setSelectionRange(0, 999999);
-      var ok = false;
-      try { ok = document.execCommand('copy'); } catch (e) {}
-      if (navigator.clipboard) navigator.clipboard.writeText(tsv).then(function () {}, function () {});
-      $('f-copiar').textContent = ok ? 'Copiado' : 'Selecciona y copia a mano';
-    };
+
+    Array.prototype.forEach.call(panel2.querySelectorAll('[data-copiar]'), function (b) {
+      b.onclick = function () {
+        var ta = $('tsv-' + b.dataset.copiar);
+        ta.select();
+        ta.setSelectionRange(0, 999999);
+        var ok = false;
+        try { ok = document.execCommand('copy'); } catch (e) {}
+        if (navigator.clipboard) navigator.clipboard.writeText(ta.value).then(function () {}, function () {});
+        b.textContent = ok ? 'Copiada' : 'Selecciona y copia a mano';
+        setTimeout(function () { b.textContent = 'Copiar esta tabla'; }, 2500);
+      };
+    });
   }
 
   /* ---------- formularios ---------- */
@@ -2469,9 +2486,14 @@ import {
       }
 
       var cambiaNombre = nuevo !== nombre;
+      var cambiaCorreo = normCorreo(p.correo) !== correo;
       if (cambiaNombre && suyos &&
           !confirm('Se va a renombrar a ' + nombre + ' como ' + nuevo + ' en sus ' + suyos +
                    ' movimiento' + (suyos === 1 ? '' : 's') + '. ¿Seguir?')) return;
+
+      if (cambiaCorreo && suyos &&
+          !confirm('Al cambiar el correo, sus ' + suyos + ' movimiento' + (suyos === 1 ? '' : 's') +
+                   ' pasan a verse desde ' + correo + ' y dejan de verse desde el correo anterior.\n\n¿Seguir?')) return;
 
       registrar(function () {
         var t = Date.now();
@@ -2488,6 +2510,15 @@ import {
           });
           if (filtro === nombre) filtro = nuevo;
           if (elegidas[nombre]) { delete elegidas[nombre]; elegidas[nuevo] = true; }
+        }
+
+        // Cada movimiento lleva grabados los correos de sus dos partes, y de
+        // ahí depende quién puede verlo. Al cambiar el correo hay que volver a
+        // escribirlos, o esa persona dejaría de ver sus propias cuentas.
+        if (cambiaCorreo) {
+          datos.movs.forEach(function (m) {
+            if (m.de === nuevo || m.a === nuevo) m.actualizado = t;
+          });
         }
       }).then(formPersonas);
     };
