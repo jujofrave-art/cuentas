@@ -346,6 +346,12 @@ mark{background:#F4E7A8;color:inherit;padding:0 1px}
 /* ---------- hojas / formularios ---------- */
 .hoja{background:var(--card);border:1px solid var(--ink);padding:16px;margin-top:12px}
 .hoja h3{font-family:var(--display);font-size:19px;font-weight:700;margin:0 0 14px}
+.hoja h3.con-cerrar{display:flex;align-items:flex-start;justify-content:space-between;gap:12px}
+.cerrar-arriba{
+  background:none;border:0;font-family:var(--sans);font-size:22px;line-height:1;
+  color:var(--ink-soft);padding:0 2px;margin:-2px -2px 0 0;flex:none;
+}
+.cerrar-arriba:hover{color:var(--ink)}
 .campo{margin-bottom:13px}
 .campo > label{display:block;font-family:var(--mono);font-size:10px;letter-spacing:.13em;text-transform:uppercase;color:var(--ink-soft);margin-bottom:5px}
 .campo input,.campo select{
@@ -523,7 +529,7 @@ import {
     appId: '1:754021039496:web:4ddf05feec8d2dac1ece3d'
   };
 
-  var VERSION = 'firebase-2026.08.15-A';
+  var VERSION = 'firebase-2026.08.15-B';
   var DUENO = 'jujofrave@gmail.com';
 
   var TIPOS = {
@@ -2560,6 +2566,34 @@ import {
   /* ---------- formularios ---------- */
   function cerrar() { panel.innerHTML = ''; panel2.innerHTML = ''; }
 
+  /**
+   * Le pone una × arriba a cada panel que se abra. Los paneles largos, como
+   * Permisos, obligaban a bajar hasta el final solo para cerrarlos.
+   */
+  function vigilarPaneles() {
+    var observador = new MutationObserver(function () {
+      [panel, panel2].forEach(function (caja) {
+        Array.prototype.forEach.call(caja.querySelectorAll('.hoja'), function (hoja) {
+          var titulo = hoja.querySelector('h3');
+          if (!titulo || hoja.querySelector('.cerrar-arriba')) return;
+
+          titulo.classList.add('con-cerrar');
+          var x = document.createElement('button');
+          x.className = 'cerrar-arriba';
+          x.setAttribute('aria-label', 'Cerrar');
+          x.textContent = '×';
+          x.onclick = function () {
+            var abajo = hoja.querySelector('#f-no');
+            if (abajo) abajo.click(); else cerrar();
+          };
+          titulo.appendChild(x);
+        });
+      });
+    });
+    observador.observe(panel, { childList: true, subtree: true });
+    observador.observe(panel2, { childList: true, subtree: true });
+  }
+
   function formPersonas() {
     panel2.innerHTML = '';
     var gente = personasVivas();
@@ -3231,6 +3265,7 @@ import {
 
   // Firebase avisa si hay sesión abierta y desde ahí arranca todo.
   window.__cuentasArranco = true;
+  vigilarPaneles();
   pintarEstado();
   pintarPuerta();
 })();
