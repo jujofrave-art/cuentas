@@ -110,6 +110,8 @@ html,body{margin:0;background:var(--paper)}
 .carpeta-cab .cuanto{font-family:var(--mono);font-variant-numeric:tabular-nums;font-weight:500;color:var(--debe);white-space:nowrap}
 .carpeta-cuerpo{border-top:1px solid var(--rule-soft);background:#F3F7F1}
 .carpeta-cuerpo .deuda{border:0;border-bottom:1px solid var(--rule-soft);border-left:0;padding-left:18px}
+.carpeta-cuerpo .movs{border:0}
+.carpeta-cuerpo .mov{padding-left:16px}
 .carpeta-cuerpo .deuda:last-child{border-bottom:0}
 
 /* ---------- personas ---------- */
@@ -530,7 +532,7 @@ import {
     appId: '1:754021039496:web:4ddf05feec8d2dac1ece3d'
   };
 
-  var VERSION = 'firebase-2026.08.15-E';
+  var VERSION = 'firebase-2026.08.15-F';
   var DUENO = 'jujofrave@gmail.com';
 
   var TIPOS = {
@@ -1566,6 +1568,15 @@ import {
     return heno.indexOf(aguja) > -1;
   }
 
+  var mesesAbiertos = null;   // null = todavía no se ha decidido cuál abrir
+
+  function nombreMes(iso) {
+    var m = ['enero','febrero','marzo','abril','mayo','junio','julio',
+             'agosto','septiembre','octubre','noviembre','diciembre'];
+    var p = String(iso).split('-');
+    return m[+p[1] - 1] + ' de ' + p[0];
+  }
+
   function pintarMovs() {
     pintarChips();
     pintarResumen();
@@ -1600,8 +1611,7 @@ import {
 
     pintarBarraSel(lista);
 
-    cont.innerHTML = '<div class="movs">' + lista.map(function (m) {
-      var sinSubir = false;
+    function filaMov(m) {
       var ultima = modoSel
         ? '<span class="marca"><input type="checkbox" data-id="' + m.id + '"' + (elegidos[m.id] ? ' checked' : '') +
           ' aria-label="Seleccionar movimiento"></span>'
@@ -1614,11 +1624,52 @@ import {
                '<span><span class="quien">' + resaltar(m.de) + '</span>' +
                  '<span class="flecha">→</span><span class="quien">' + resaltar(m.a) + '</span>' +
                  '<span class="que">' + TIPOS[m.tipo].corto + detalleMov(m) + (m.nota ? ' · ' + resaltar(m.nota) : '') +
-                 (sinSubir ? ' <span class="pend">SIN SUBIR</span>' : '') + '</span></span>' +
+                 '</span></span>' +
                '<span class="monto" data-tipo="' + m.tipo + '">' + plata(m.monto) + '</span>' +
                ultima +
              '</div>';
-    }).join('') + '</div>';
+    }
+
+    // Buscando o filtrando ya se ve poco: la lista va plana, sin carpetas.
+    if (busqueda || filtro || modoSel) {
+      cont.innerHTML = '<div class="movs">' + lista.map(filaMov).join('') + '</div>';
+    } else {
+      var meses = {};
+      lista.forEach(function (m) {
+        var k = String(m.fecha).slice(0, 7);
+        if (!meses[k]) meses[k] = [];
+        meses[k].push(m);
+      });
+      var claves = Object.keys(meses).sort().reverse();
+
+      // La primera vez se abre el mes más reciente y los demás quedan plegados.
+      if (mesesAbiertos === null) {
+        mesesAbiertos = {};
+        if (claves.length) mesesAbiertos[claves[0]] = true;
+      }
+
+      cont.innerHTML = claves.map(function (k) {
+        var abierto = !!mesesAbiertos[k];
+        var suma = meses[k].reduce(function (t, m) { return t + m.monto; }, 0);
+        return '<div class="carpeta' + (abierto ? ' abierta' : '') + '" style="border-left-color:var(--rule)">' +
+          '<button class="carpeta-cab" data-mes="' + k + '">' +
+            '<span class="flecha">' + (abierto ? '▾' : '▸') + '</span>' +
+            '<span class="quienes"><span class="deudor">' + nombreMes(k + '-01') + '</span>' +
+              '<span class="rel">' + meses[k].length + ' movimiento' + (meses[k].length === 1 ? '' : 's') + '</span></span>' +
+            '<span class="cuanto" style="color:var(--ink-soft)">' + plata(suma) + '</span>' +
+          '</button>' +
+          (abierto ? '<div class="carpeta-cuerpo"><div class="movs">' + meses[k].map(filaMov).join('') + '</div></div>' : '') +
+        '</div>';
+      }).join('');
+
+      Array.prototype.forEach.call(cont.querySelectorAll('[data-mes]'), function (b) {
+        b.onclick = function () {
+          var k = b.dataset.mes;
+          if (mesesAbiertos[k]) delete mesesAbiertos[k]; else mesesAbiertos[k] = true;
+          pintarMovs();
+        };
+      });
+    }
 
     if (modoSel) {
       Array.prototype.forEach.call(cont.querySelectorAll('.mov'), function (fila) {
