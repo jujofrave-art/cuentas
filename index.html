@@ -568,7 +568,7 @@ import {
     appId: '1:754021039496:web:4ddf05feec8d2dac1ece3d'
   };
 
-  var VERSION = 'firebase-2026.08.15-K';
+  var VERSION = 'firebase-2026.08.16-A';
   var DUENO = 'jujofrave@gmail.com';
 
   var TIPOS = {
@@ -755,6 +755,27 @@ import {
   function cerrarSesion() {
     soltarEscuchas();
     signOut(auth).catch(function () {});
+  }
+
+  /**
+   * Fuerza la búsqueda de una versión nueva: borra las copias guardadas,
+   * le pide al ayudante de segundo plano que se actualice, y recarga.
+   */
+  function buscarActualizacion() {
+    var tareas = [];
+    if (window.caches) {
+      tareas.push(caches.keys().then(function (ll) {
+        return Promise.all(ll.map(function (k) { return caches.delete(k); }));
+      }));
+    }
+    if (navigator.serviceWorker) {
+      tareas.push(navigator.serviceWorker.getRegistrations().then(function (regs) {
+        return Promise.all(regs.map(function (r) { return r.update().catch(function () {}); }));
+      }));
+    }
+    Promise.all(tareas)
+      .catch(function () {})
+      .then(function () { location.reload(true); });
   }
 
   function pedirCierreSesion() {
@@ -2153,6 +2174,27 @@ import {
     });
   }
 
+  /**
+   * Fuerza la búsqueda de una versión nueva: borra las copias guardadas,
+   * le pide al ayudante de segundo plano que se actualice, y recarga.
+   */
+  function buscarActualizacion() {
+    var tareas = [];
+    if (window.caches) {
+      tareas.push(caches.keys().then(function (ll) {
+        return Promise.all(ll.map(function (k) { return caches.delete(k); }));
+      }));
+    }
+    if (navigator.serviceWorker) {
+      tareas.push(navigator.serviceWorker.getRegistrations().then(function (regs) {
+        return Promise.all(regs.map(function (r) { return r.update().catch(function () {}); }));
+      }));
+    }
+    Promise.all(tareas)
+      .catch(function () {})
+      .then(function () { location.reload(true); });
+  }
+
   function pedirCierreSesion() {
     if (confirm('¿Cerrar sesión en este dispositivo? Los datos se quedan guardados.')) cerrarSesion();
   }
@@ -3501,14 +3543,16 @@ import {
       lineas.push('');
       if (mia.indexOf(VERSION) > -1) {
         lineas.push('Actualización automática: ACTIVA.');
-        lineas.push('De aquí en adelante, al abrir la app con internet');
-        lineas.push('siempre vas a ver la última versión.');
-      } else {
-        lineas.push('Actualización automática: NO.');
-        lineas.push('Toca desinstalar la app, borrar los datos del sitio');
-        lineas.push('y volver a entrar. Es la última vez que hay que hacerlo.');
+        lineas.push('Al abrir con internet siempre vas a ver la última versión.');
+        lineas.push('');
+        lineas.push('¿Buscar una versión nueva ahora mismo?');
+        if (confirm(lineas.join('\n'))) buscarActualizacion();
+        return;
       }
-      alert(lineas.join('\n'));
+      lineas.push('Actualización automática: NO.');
+      lineas.push('');
+      lineas.push('¿Forzar la actualización ahora?');
+      if (confirm(lineas.join('\n'))) buscarActualizacion();
     }).catch(function () {
       alert(lineas.join('\n') + '\nNo se pudo leer la copia guardada.');
     });

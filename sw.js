@@ -6,7 +6,7 @@
  * en aparecer.
  */
 
-var CACHE = 'cuentas-firebase-2026.08.15-K';
+var CACHE = 'cuentas-firebase-2026.08.16-A';
 var BASE = new URL('./', self.location).pathname;
 
 var ARCHIVOS = [
@@ -38,11 +38,18 @@ self.addEventListener('activate', function (e) {
   );
 });
 
-/** Guarda una copia de la respuesta para cuando no haya señal. */
-function guardar(req, resp) {
+/**
+ * Guarda una copia para cuando no haya señal.
+ *
+ * Va con waitUntil a propósito: sin eso el navegador puede apagar este
+ * proceso apenas entrega la respuesta, y la copia nueva se pierde a medio
+ * guardar. Esa era la razón de que un teléfono se quedara en una versión
+ * vieja aunque sí hubiera descargado la nueva.
+ */
+function guardar(e, req, resp) {
   if (resp && (resp.ok || resp.type === 'opaque')) {
     var copia = resp.clone();
-    caches.open(CACHE).then(function (c) { c.put(req, copia); });
+    e.waitUntil(caches.open(CACHE).then(function (c) { return c.put(req, copia); }));
   }
   return resp;
 }
@@ -69,15 +76,21 @@ self.addEventListener('fetch', function (e) {
                 req.url.replace(/[?#].*$/, '').endsWith(BASE);
 
   // La app misma: primero la red, para que una versión nueva se vea de una.
-  // Si la red falla o tarda más de 4 segundos, entra la copia guardada.
+  // Se pide sin pasar por la caché del navegador, que puede tener guardada
+  // una copia de hasta diez minutos y devolvería la versión anterior.
   if (esLaApp) {
+    var deLaRed = fetch(req, { cache: 'no-store' })
+      .then(function (resp) { return guardar(e, req, resp); });
+
     e.respondWith(
       Promise.race([
-        fetch(req).then(function (resp) { return guardar(req, resp); }),
+        deLaRed,
+        // Doce segundos de paciencia: en datos móviles cuatro eran muy pocos
+        // y el teléfono se rendía casi siempre, quedándose en lo viejo.
         new Promise(function (resolver) {
           setTimeout(function () {
             caches.match(req).then(function (g) { if (g) resolver(g); });
-          }, 4000);
+          }, 12000);
         })
       ]).catch(function () {
         return caches.match(req).then(function (g) {
@@ -92,7 +105,7 @@ self.addEventListener('fetch', function (e) {
   e.respondWith(
     caches.match(req).then(function (guardada) {
       var red = fetch(req)
-        .then(function (resp) { return guardar(req, resp); })
+        .then(function (resp) { return guardar(e, req, resp); })
         .catch(function () { return guardada || Response.error(); });
       return guardada || red;
     })
