@@ -568,7 +568,7 @@ import {
     appId: '1:754021039496:web:4ddf05feec8d2dac1ece3d'
   };
 
-  var VERSION = 'firebase-2026.08.16-A';
+  var VERSION = 'firebase-2026.08.16-B';
   var DUENO = 'jujofrave@gmail.com';
 
   var TIPOS = {
@@ -762,6 +762,14 @@ import {
    * le pide al ayudante de segundo plano que se actualice, y recarga.
    */
   function buscarActualizacion() {
+    // Sin señal no hay nada que traer, y borrar la copia dejaría la app
+    // sin poder abrir hasta que vuelva la conexión.
+    if (!navigator.onLine) {
+      alert('Para buscar una versión nueva hace falta internet.\n\n' +
+            'Sin señal la app sigue funcionando con la versión que ya tiene.');
+      return;
+    }
+
     var tareas = [];
     if (window.caches) {
       tareas.push(caches.keys().then(function (ll) {
@@ -2179,6 +2187,14 @@ import {
    * le pide al ayudante de segundo plano que se actualice, y recarga.
    */
   function buscarActualizacion() {
+    // Sin señal no hay nada que traer, y borrar la copia dejaría la app
+    // sin poder abrir hasta que vuelva la conexión.
+    if (!navigator.onLine) {
+      alert('Para buscar una versión nueva hace falta internet.\n\n' +
+            'Sin señal la app sigue funcionando con la versión que ya tiene.');
+      return;
+    }
+
     var tareas = [];
     if (window.caches) {
       tareas.push(caches.keys().then(function (ll) {
@@ -3545,7 +3561,10 @@ import {
         lineas.push('Actualización automática: ACTIVA.');
         lineas.push('Al abrir con internet siempre vas a ver la última versión.');
         lineas.push('');
-        lineas.push('¿Buscar una versión nueva ahora mismo?');
+        lineas.push(navigator.onLine
+          ? '¿Buscar una versión nueva ahora mismo?'
+          : 'Sin señal ahora: cuando vuelva, la app se actualiza sola.');
+        if (!navigator.onLine) { alert(lineas.join('\n')); return; }
         if (confirm(lineas.join('\n'))) buscarActualizacion();
         return;
       }
